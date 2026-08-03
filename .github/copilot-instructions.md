@@ -289,13 +289,6 @@ gh issue view <issue-number>
 gh issue view <issue-number> --comments
 ```
 
-### Exercise Step Commands
-
-- The main exercise issue contains "Exercise:" in the title
-- Individual steps are posted as comments on the main issue
-- Use `/execute-step` prompt to implement a specific step
-- Use `/validate-step` prompt to verify step completion
-- Always use `gh issue view` commands to retrieve current context
 
 ## Git Workflow
 
