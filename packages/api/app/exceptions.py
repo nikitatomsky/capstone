@@ -15,3 +15,15 @@ class MissingTextError(WebhookError):
 
 class InvalidChatIdError(WebhookError):
     """Raised when chat_id is invalid or missing."""
+
+
+class LLMExtractionError(Exception):
+    """Base exception for LLM extraction errors."""
+
+
+class LLMAPIError(LLMExtractionError):
+    """Raised when LLM API call fails."""
+
+
+class LLMParseError(LLMExtractionError):
+    """Raised when LLM response cannot be parsed."""
