@@ -1,0 +1,11 @@
+project_name                    = "field-intake-service"
+environment                     = "dev"
+aws_region                      = "<aws-region>"
+lambda_runtime                  = "python3.12"
+lambda_handler                  = "app.lambda_handler.handler"
+lambda_artifact_path            = "<lambda-artifact-path>"
+webhook_path                    = "/webhook"
+health_path                     = "<health-path>"
+intake_table_name               = "field-intake-service-dev-intake-records"
+manager_notification_topic_name = "field-intake-service-dev-manager-notifications"
+log_retention_days              = 14

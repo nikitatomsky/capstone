@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "field-intake-service-api"
+version = "0.1.0"
+description = "TODO: FastAPI Telegram webhook service for conversational field intake."
+authors = ["TODO <todo@example.com>"]
+readme = "README.md"
+packages = [{ include = "app" }]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+# TODO: Add fastapi, uvicorn, pydantic, LLM SDK, Telegram client, boto3, and Mangum dependencies.
+
+[tool.poetry.group.dev.dependencies]
+# TODO: Add pytest, ruff, coverage, and test helpers.
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

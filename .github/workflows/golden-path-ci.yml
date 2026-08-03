@@ -1,0 +1,77 @@
+name: Golden Path CI
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        description: Python version for the API package.
+        required: false
+        type: string
+        default: "3.12"
+      api-working-directory:
+        description: API package directory.
+        required: false
+        type: string
+        default: packages/api
+      terraform-working-directory:
+        description: Terraform stack directory.
+        required: false
+        type: string
+        default: infra/stacks/dev
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: TODO install Python dependencies
+        run: 'echo "TODO: poetry install"'
+      - name: TODO run linter
+        run: 'echo "TODO: poetry run ruff check ."'
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: TODO install Python dependencies
+        run: 'echo "TODO: poetry install"'
+      - name: TODO run tests
+        run: 'echo "TODO: poetry run pytest"'
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: TODO dependency scan
+        run: 'echo "TODO: add Python dependency and secret scanning"'
+
+  terraform-plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: TODO configure AWS credentials
+        run: 'echo "TODO: configure OIDC role through GitHub environment secrets"'
+      - name: TODO terraform init
+        run: 'echo "TODO: terraform -chdir=${{ inputs.terraform-working-directory }} init"'
+      - name: TODO terraform validate
+        run: 'echo "TODO: terraform -chdir=${{ inputs.terraform-working-directory }} validate"'
+      - name: TODO terraform plan
+        run: 'echo "TODO: terraform -chdir=${{ inputs.terraform-working-directory }} plan"'
+
+  artifact-build:
+    name: Artifact Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: TODO build Lambda artifact
+        run: 'echo "TODO: build FastAPI Lambda artifact after packaging strategy is selected"'
