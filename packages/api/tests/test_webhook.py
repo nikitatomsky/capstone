@@ -119,6 +119,150 @@ def test_webhook_rejects_empty_payload(client):
     assert "detail" in data
 
 
+# ============================================================================
+# Integration Tests: Webhook-Session Integration
+# ============================================================================
+
+
+def test_webhook_creates_session_for_new_chat(client, monkeypatch):
+    """Test that webhook creates a new session for first message from chat_id."""
+    from app.services.session_service import SessionService
+
+    # Create a session service instance for testing
+    session_service = SessionService()
+
+    # Inject session service into main module
+    import app.main
+
+    monkeypatch.setattr(app.main, "session_service", session_service)
+
+    # Send first message from a new chat
+    payload = get_sample_telegram_update("First message", chat_id=12345)
+    response = client.post("/webhook", json=payload)
+
+    # Webhook should succeed
+    assert response.status_code == 200
+
+    # Session should be created for this chat_id
+    session = session_service.get_session(12345)
+    assert session is not None
+    assert session["chat_id"] == 12345
+    assert "intake_record" in session
+    assert "conversation_history" in session
+
+
+def test_webhook_retrieves_existing_session(client, monkeypatch):
+    """Test that webhook reuses existing session for subsequent messages."""
+    from app.services.session_service import SessionService
+
+    session_service = SessionService()
+    import app.main
+
+    monkeypatch.setattr(app.main, "session_service", session_service)
+
+    # Send first message
+    payload1 = get_sample_telegram_update("First message", chat_id=12345)
+    client.post("/webhook", json=payload1)
+    session1 = session_service.get_session(12345)
+
+    # Send second message from same chat
+    payload2 = get_sample_telegram_update("Second message", chat_id=12345)
+    client.post("/webhook", json=payload2)
+    session2 = session_service.get_session(12345)
+
+    # Should be the exact same session object (not a new one)
+    assert session1 is session2
+
+
+def test_webhook_logs_message_to_conversation_history(client, monkeypatch):
+    """Test that webhook adds messages to conversation history."""
+    from app.services.session_service import SessionService
+
+    session_service = SessionService()
+    import app.main
+
+    monkeypatch.setattr(app.main, "session_service", session_service)
+
+    # Send multiple messages from same chat
+    messages = [
+        "Hello, I completed a service call",
+        "It was at 123 Main Street",
+        "HVAC repair completed successfully",
+    ]
+
+    for msg in messages:
+        payload = get_sample_telegram_update(msg, chat_id=99999)
+        client.post("/webhook", json=payload)
+
+    # Verify all messages are in conversation history
+    session = session_service.get_session(99999)
+    assert "conversation_history" in session
+    assert len(session["conversation_history"]) == 3
+
+    # Check message content
+    assert session["conversation_history"][0]["message"] == messages[0]
+    assert session["conversation_history"][1]["message"] == messages[1]
+    assert session["conversation_history"][2]["message"] == messages[2]
+
+    # Each message should have a timestamp
+    for entry in session["conversation_history"]:
+        assert "timestamp" in entry
+
+
+def test_webhook_tracks_different_chats_separately(client, monkeypatch):
+    """Test that webhook maintains separate sessions for different chat_ids."""
+    from app.services.session_service import SessionService
+
+    session_service = SessionService()
+    import app.main
+
+    monkeypatch.setattr(app.main, "session_service", session_service)
+
+    # Send messages from two different chats
+    payload1 = get_sample_telegram_update("Message from chat 1", chat_id=11111)
+    payload2 = get_sample_telegram_update("Message from chat 2", chat_id=22222)
+
+    client.post("/webhook", json=payload1)
+    client.post("/webhook", json=payload2)
+
+    # Each chat should have its own session
+    session1 = session_service.get_session(11111)
+    session2 = session_service.get_session(22222)
+
+    assert session1 is not session2
+    assert session1["chat_id"] == 11111
+    assert session2["chat_id"] == 22222
+    assert len(session1["conversation_history"]) == 1
+    assert len(session2["conversation_history"]) == 1
+
+
+def test_webhook_returns_message_count_in_response(client, monkeypatch):
+    """Test that webhook response includes message count from session."""
+    from app.services.session_service import SessionService
+
+    session_service = SessionService()
+    import app.main
+
+    monkeypatch.setattr(app.main, "session_service", session_service)
+
+    # Send first message
+    payload1 = get_sample_telegram_update("First message", chat_id=55555)
+    response1 = client.post("/webhook", json=payload1)
+    data1 = response1.json()
+
+    # Should return message count
+    assert "message_count" in data1
+    assert data1["message_count"] == 1
+
+    # Send second message
+    payload2 = get_sample_telegram_update("Second message", chat_id=55555)
+    response2 = client.post("/webhook", json=payload2)
+    data2 = response2.json()
+
+    # Message count should increment
+    assert data2["message_count"] == 2
+
+
 def test_webhook_rejects_message_without_text(client):
     """Test that webhook handles messages without text field."""
     payload = get_sample_telegram_update()
