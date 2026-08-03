@@ -7,26 +7,10 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from app.constants import EXTRACTION_SYSTEM_PROMPT, MAX_MESSAGE_LENGTH
 from app.exceptions import LLMParseError
 
 logger = logging.getLogger(__name__)
-
-# Constants
-MAX_MESSAGE_LENGTH = 4096  # Telegram message limit
-
-# System prompt for LLM extraction
-EXTRACTION_SYSTEM_PROMPT = """You are an AI assistant that extracts structured data from field service reports.
-
-Extract the following fields if present in the message:
-- employee_name: Name of the field employee
-- location: Service call location or address
-- service_type: Type of service (HVAC, Plumbing, Electrical, etc.)
-- outcome: Call outcome (completed, needs_followup, escalated, cancelled)
-- notes: Any additional notes or details
-
-Return ONLY a JSON object with the extracted fields. Do not include fields that are not mentioned.
-Example: {"location": "123 Main St", "service_type": "HVAC Repair", "outcome": "completed"}
-"""
 
 
 class LLMProvider(ABC):

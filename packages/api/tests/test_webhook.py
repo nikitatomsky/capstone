@@ -132,9 +132,9 @@ def test_webhook_creates_session_for_new_chat(client, monkeypatch):
     session_service = SessionService()
 
     # Inject session service into main module
-    import app.main
+    import app.routers.webhook
 
-    monkeypatch.setattr(app.main, "session_service", session_service)
+    monkeypatch.setattr(app.routers.webhook, "session_service", session_service)
 
     # Send first message from a new chat
     payload = get_sample_telegram_update("First message", chat_id=12345)
@@ -156,9 +156,9 @@ def test_webhook_retrieves_existing_session(client, monkeypatch):
     from app.services.session_service import SessionService
 
     session_service = SessionService()
-    import app.main
+    import app.routers.webhook
 
-    monkeypatch.setattr(app.main, "session_service", session_service)
+    monkeypatch.setattr(app.routers.webhook, "session_service", session_service)
 
     # Send first message
     payload1 = get_sample_telegram_update("First message", chat_id=12345)
@@ -179,9 +179,9 @@ def test_webhook_logs_message_to_conversation_history(client, monkeypatch):
     from app.services.session_service import SessionService
 
     session_service = SessionService()
-    import app.main
+    import app.routers.webhook
 
-    monkeypatch.setattr(app.main, "session_service", session_service)
+    monkeypatch.setattr(app.routers.webhook, "session_service", session_service)
 
     # Send multiple messages from same chat
     messages = [
@@ -199,6 +199,202 @@ def test_webhook_logs_message_to_conversation_history(client, monkeypatch):
     assert "conversation_history" in session
     assert len(session["conversation_history"]) == 3
 
+
+# ============================================================================
+# Integration Tests: Extraction Service Integration
+# ============================================================================
+
+
+def test_webhook_extracts_and_updates_intake_record(client, monkeypatch):
+    """Webhook should extract data and update IntakeRecord."""
+    from app.services.session_service import SessionService
+
+    # Setup mocks
+    session_service = SessionService()
+
+    class MockExtraction:
+        def extract_from_message(self, text):
+            return {"location": "123 Main St", "service_type": "HVAC"}
+
+    extraction_service = MockExtraction()
+
+    import app.routers.webhook
+
+    monkeypatch.setattr(app.routers.webhook, "session_service", session_service)
+    monkeypatch.setattr(app.routers.webhook, "extraction_service", extraction_service)
+
+    # Send message
+    payload = get_sample_telegram_update("I did HVAC work at 123 Main St", chat_id=12345)
+    response = client.post("/webhook", json=payload)
+
+    assert response.status_code == 200
+
+    # Check IntakeRecord was updated
+    session = session_service.get_session(12345)
+    assert session["intake_record"].location == "123 Main St"
+    assert session["intake_record"].service_type == "HVAC"
+
+
+def test_webhook_sends_followup_for_missing_fields(client, monkeypatch):
+    """Webhook should ask for missing required fields."""
+    from app.services.session_service import SessionService
+
+    session_service = SessionService()
+
+    class MockExtraction:
+        def extract_from_message(self, text):
+            return {"location": "456 Oak Ave"}  # Only location, missing others
+
+    class MockTelegram:
+        def __init__(self):
+            self.sent_messages = []
+
+        async def send_message(self, chat_id, text):
+            self.sent_messages.append((chat_id, text))
+
+    extraction_service = MockExtraction()
+    telegram_client = MockTelegram()
+
+    import app.routers.webhook
+
+    monkeypatch.setattr(app.routers.webhook, "session_service", session_service)
+    monkeypatch.setattr(app.routers.webhook, "extraction_service", extraction_service)
+    monkeypatch.setattr(app.routers.webhook, "telegram_client", telegram_client)
+
+    # Send message
+    payload = get_sample_telegram_update("Work done at 456 Oak Ave", chat_id=99999)
+    response = client.post("/webhook", json=payload)
+
+    assert response.status_code == 200
+
+    # Check follow-up was sent
+    assert len(telegram_client.sent_messages) == 1
+    chat_id, message_text = telegram_client.sent_messages[0]
+    assert chat_id == 99999
+    # Should ask about missing fields (employee_name, service_type, outcome)
+    assert any(
+        keyword in message_text.lower()
+        for keyword in ["name", "type", "service", "outcome"]
+    )
+
+
+def test_webhook_completes_intake_when_all_fields_present(client, monkeypatch):
+    """Webhook should detect completion and confirm with user."""
+    from app.services.session_service import SessionService
+
+    session_service = SessionService()
+
+    class MockExtraction:
+        def __init__(self):
+            self.call_count = 0
+
+        def extract_from_message(self, text):
+            self.call_count += 1
+            if self.call_count == 1:
+                return {"employee_name": "John Doe", "location": "789 Elm St"}
+            elif self.call_count == 2:
+                return {"service_type": "Plumbing", "outcome": "completed"}
+            return {}
+
+    class MockTelegram:
+        def __init__(self):
+            self.sent_messages = []
+
+        async def send_message(self, chat_id, text):
+            self.sent_messages.append((chat_id, text))
+
+    extraction_service = MockExtraction()
+    telegram_client = MockTelegram()
+
+    import app.routers.webhook
+
+    monkeypatch.setattr(app.routers.webhook, "session_service", session_service)
+    monkeypatch.setattr(app.routers.webhook, "extraction_service", extraction_service)
+    monkeypatch.setattr(app.routers.webhook, "telegram_client", telegram_client)
+
+    # First message
+    payload1 = get_sample_telegram_update("John Doe here, worked at 789 Elm St", chat_id=55555)
+    client.post("/webhook", json=payload1)
+
+    # Second message completes the record
+    payload2 = get_sample_telegram_update("Plumbing job completed successfully", chat_id=55555)
+    response = client.post("/webhook", json=payload2)
+
+    assert response.status_code == 200
+
+    # Check record is complete
+    session = session_service.get_session(55555)
+    assert session["intake_record"].is_complete()
+
+    # Check confirmation message was sent
+    assert len(telegram_client.sent_messages) >= 2
+    last_message = telegram_client.sent_messages[-1][1]
+    assert any(
+        keyword in last_message.lower()
+        for keyword in ["complete", "thank", "received", "confirmed", "recorded"]
+    )
+
+
+def test_multi_turn_conversation_progressively_fills_record(client, monkeypatch):
+    """Multiple messages should progressively build IntakeRecord."""
+    from app.services.session_service import SessionService
+
+    session_service = SessionService()
+
+    # Each message extracts different fields
+    extractions = [
+        {"employee_name": "Jane Smith"},
+        {"location": "321 Pine Rd"},
+        {"service_type": "Electrical"},
+        {"outcome": "completed", "notes": "All outlets working"},
+    ]
+
+    class MockExtraction:
+        def __init__(self):
+            self.call_count = 0
+
+        def extract_from_message(self, text):
+            result = extractions[min(self.call_count, len(extractions) - 1)]
+            self.call_count += 1
+            return result
+
+    class MockTelegram:
+        def __init__(self):
+            self.sent_messages = []
+
+        async def send_message(self, chat_id, text):
+            self.sent_messages.append((chat_id, text))
+
+    extraction_service = MockExtraction()
+    telegram_client = MockTelegram()
+
+    import app.routers.webhook
+
+    monkeypatch.setattr(app.routers.webhook, "session_service", session_service)
+    monkeypatch.setattr(app.routers.webhook, "extraction_service", extraction_service)
+    monkeypatch.setattr(app.routers.webhook, "telegram_client", telegram_client)
+
+    messages = [
+        "This is Jane Smith",
+        "I was at 321 Pine Rd",
+        "Electrical work",
+        "Everything completed, all outlets working",
+    ]
+
+    chat_id = 77777
+    for msg in messages:
+        payload = get_sample_telegram_update(msg, chat_id=chat_id)
+        client.post("/webhook", json=payload)
+
+    # Check final state
+    session = session_service.get_session(chat_id)
+    record = session["intake_record"]
+    assert record.employee_name == "Jane Smith"
+    assert record.location == "321 Pine Rd"
+    assert record.service_type == "Electrical"
+    assert record.outcome == "completed"
+    assert record.is_complete()
+
     # Check message content
     assert session["conversation_history"][0]["message"] == messages[0]
     assert session["conversation_history"][1]["message"] == messages[1]
@@ -214,9 +410,9 @@ def test_webhook_tracks_different_chats_separately(client, monkeypatch):
     from app.services.session_service import SessionService
 
     session_service = SessionService()
-    import app.main
+    import app.routers.webhook
 
-    monkeypatch.setattr(app.main, "session_service", session_service)
+    monkeypatch.setattr(app.routers.webhook, "session_service", session_service)
 
     # Send messages from two different chats
     payload1 = get_sample_telegram_update("Message from chat 1", chat_id=11111)
@@ -241,9 +437,9 @@ def test_webhook_returns_message_count_in_response(client, monkeypatch):
     from app.services.session_service import SessionService
 
     session_service = SessionService()
-    import app.main
+    import app.routers.webhook
 
-    monkeypatch.setattr(app.main, "session_service", session_service)
+    monkeypatch.setattr(app.routers.webhook, "session_service", session_service)
 
     # Send first message
     payload1 = get_sample_telegram_update("First message", chat_id=55555)

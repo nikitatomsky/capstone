@@ -1,88 +1,54 @@
 """Main FastAPI application for Field Intake Service."""
 
 import logging
+import os
 
-from fastapi import FastAPI, HTTPException, Request, status
+from dotenv import load_dotenv
+from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
 
+# Load environment variables from .env file
+load_dotenv()
+
+from app import handlers
+from app.constants import MAX_LOG_MESSAGE_LENGTH
 from app.exceptions import MissingMessageError, MissingTextError, WebhookError
-from app.models.telegram import TelegramUpdate
+from app.routers import health, webhook
+from app.services.extraction_service import ExtractionService
+from app.services.intake_helpers import generate_followup_question, get_missing_fields
+from app.services.llm_providers import AnthropicProvider
 from app.services.session_service import SessionService
+from app.services.telegram_client import TelegramClient
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Constants
-MAX_LOG_MESSAGE_LENGTH = 50  # Characters to show in logs
 
 app = FastAPI(title="Field Intake Service")
 
 # Create singleton SessionService instance
 session_service = SessionService()
 
+# Initialize Telegram client
+telegram_client = TelegramClient()
 
-@app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    """
-    Convert Pydantic validation errors (422) to Bad Request (400).
-
-    This ensures the API returns 400 for invalid payloads instead of 422.
-    """
-    logger.error(f"Validation error on {request.url}: {exc}")
-    return JSONResponse(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        content={"detail": exc.errors()},
-    )
-
-
-@app.exception_handler(MissingMessageError)
-async def missing_message_handler(request: Request, exc: MissingMessageError):
-    """
-    Handle updates that have no message field.
-
-    Returns 400 Bad Request with clear error message.
-    """
-    logger.warning(f"Missing message in update: {exc}")
-    return JSONResponse(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        content={"detail": str(exc)},
-    )
+# Initialize extraction service with LLM provider
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+# Only initialize if we have a valid API key (not placeholder or empty)
+if ANTHROPIC_API_KEY and not ANTHROPIC_API_KEY.startswith("your-"):
+    llm_provider = AnthropicProvider(ANTHROPIC_API_KEY)
+    extraction_service = ExtractionService(llm_provider)
+    logger.info("Extraction service initialized")
+else:
+    extraction_service = None
+    logger.warning("ANTHROPIC_API_KEY not set - extraction disabled")
 
 
-@app.exception_handler(MissingTextError)
-async def missing_text_handler(request: Request, exc: MissingTextError):
-    """
-    Handle messages that have no text content.
-
-    Returns 400 Bad Request with clear error message.
-    """
-    logger.warning(f"Missing text in message: {exc}")
-    return JSONResponse(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        content={"detail": str(exc)},
-    )
-
-
-@app.exception_handler(WebhookError)
-async def webhook_error_handler(request: Request, exc: WebhookError):
-    """
-    Handle generic webhook errors.
-
-    Returns 400 Bad Request for webhook-specific errors.
-    """
-    logger.error(f"Webhook error: {exc}")
-    return JSONResponse(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        content={"detail": str(exc)},
-    )
-
-
-@app.get("/health")
-async def health_check():
-    """Health check endpoint."""
-    return {"status": "healthy"}
+# Register exception handlers
+app.add_exception_handler(RequestValidationError, handlers.validation_exception_handler)
+app.add_exception_handler(MissingMessageError, handlers.missing_message_handler)
+app.add_exception_handler(MissingTextError, handlers.missing_text_handler)
+app.add_exception_handler(WebhookError, handlers.webhook_error_handler)
 
 
 def _truncate_for_log(text: str | None, max_length: int = MAX_LOG_MESSAGE_LENGTH) -> str:
@@ -103,76 +69,16 @@ def _truncate_for_log(text: str | None, max_length: int = MAX_LOG_MESSAGE_LENGTH
     return f"{text[:max_length]}..."
 
 
-@app.post("/webhook")
-async def webhook(update: TelegramUpdate):
-    """
-    Receive and process incoming Telegram webhook updates.
+# Initialize webhook router with dependencies
+webhook.init_dependencies(
+    session_service,
+    extraction_service,
+    telegram_client,
+    _truncate_for_log,
+    get_missing_fields,
+    generate_followup_question,
+)
 
-    Args:
-        update: TelegramUpdate payload from Telegram Bot API
-
-    Returns:
-        dict: Acknowledgment response with session state
-
-    Raises:
-        HTTPException: 400 if payload is invalid or missing required fields
-    """
-    try:
-        # Log incoming update
-        logger.info(f"Received update {update.update_id}")
-
-        # Check if update contains a message
-        if not update.message:
-            raise MissingMessageError(
-                f"Update {update.update_id} has no message field"
-            )
-
-        # Extract message text and chat_id
-        message_text = update.message.text
-        chat_id = update.message.chat.id
-
-        logger.info(
-            f"Processing message from chat {chat_id}: "
-            f"{_truncate_for_log(message_text)}"
-        )
-
-        # Get or create session for this chat
-        session = session_service.get_or_create_session(chat_id)
-
-        # Log message to conversation history
-        session_service.add_message(chat_id, message_text)
-
-        # Log session state for debugging
-        history_length = len(session["conversation_history"])
-        is_complete = session["intake_record"].is_complete()
-        logger.debug(
-            f"Session state for chat_id={chat_id}: "
-            f"history_length={history_length}, "
-            f"record_complete={is_complete}"
-        )
-
-        # Return acknowledgment with session info
-        return {
-            "status": "received",
-            "chat_id": chat_id,
-            "message_count": history_length,
-            "received_text": message_text,
-            "message": "Message received",
-        }
-
-    except (MissingMessageError, MissingTextError, WebhookError):
-        # Re-raise custom webhook exceptions (handled by exception handlers)
-        raise
-    except ValueError as e:
-        # Handle validation errors from SessionService
-        logger.error(f"Invalid input: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
-    except HTTPException:
-        # Re-raise HTTP exceptions
-        raise
-    except Exception:
-        # Catch unexpected errors
-        logger.exception("Unexpected error processing webhook")
-        raise HTTPException(
-            status_code=500, detail="Internal server error processing webhook"
-        )
+# Include routers
+app.include_router(health.router)
+app.include_router(webhook.router)

@@ -12,15 +12,15 @@ from tenacity import (
     wait_exponential,
 )
 
+from app.constants import (
+    DEFAULT_MAX_TOKENS,
+    DEFAULT_TIMEOUT_SECONDS,
+    MAX_RETRY_ATTEMPTS,
+)
 from app.exceptions import LLMAPIError
 from app.services.extraction_service import LLMProvider
 
 logger = logging.getLogger(__name__)
-
-# Constants
-DEFAULT_MAX_TOKENS = 1024  # Sufficient for JSON extraction response
-DEFAULT_TIMEOUT_SECONDS = 30  # Prevent hanging requests
-MAX_RETRY_ATTEMPTS = 3  # Number of retry attempts for transient errors
 
 
 class AnthropicProvider(LLMProvider):

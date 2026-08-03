@@ -4,6 +4,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
+from app.constants import MAX_CONVERSATION_HISTORY
 from app.models.intake import IntakeRecord
 
 logger = logging.getLogger(__name__)
@@ -24,8 +25,6 @@ class SessionService:
             "created_at": datetime
         }
     """
-
-    MAX_CONVERSATION_HISTORY = 100  # Maximum messages to retain per session
 
     def __init__(self):
         """Initialize the session service with empty in-memory storage."""
@@ -116,12 +115,12 @@ class SessionService:
         )
         
         # Trim old messages if exceeding limit
-        if len(history) > self.MAX_CONVERSATION_HISTORY:
-            removed = len(history) - self.MAX_CONVERSATION_HISTORY
-            session["conversation_history"] = history[-self.MAX_CONVERSATION_HISTORY:]
+        if len(history) > MAX_CONVERSATION_HISTORY:
+            removed = len(history) - MAX_CONVERSATION_HISTORY
+            session["conversation_history"] = history[-MAX_CONVERSATION_HISTORY:]
             logger.warning(
                 f"Trimmed {removed} old messages for chat_id={chat_id} "
-                f"(limit={self.MAX_CONVERSATION_HISTORY})"
+                f"(limit={MAX_CONVERSATION_HISTORY})"
             )
         
         logger.debug(

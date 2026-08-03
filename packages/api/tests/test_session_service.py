@@ -311,10 +311,10 @@ def test_add_message_creates_session_if_needed(session_service):
 
 def test_conversation_history_trimming(session_service):
     """Test that conversation history is trimmed when exceeding MAX_CONVERSATION_HISTORY."""
-    from app.services.session_service import SessionService
+    from app.constants import MAX_CONVERSATION_HISTORY
 
     chat_id = 12345
-    max_history = SessionService.MAX_CONVERSATION_HISTORY
+    max_history = MAX_CONVERSATION_HISTORY
 
     # Add more messages than the limit
     num_messages = max_history + 10
