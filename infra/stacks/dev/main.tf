@@ -15,6 +15,12 @@ provider "aws" {
 	region = var.aws_region
 }
 
+# DynamoDB tables for assignment workflow
+module "dynamodb" {
+	source      = "../../modules/dynamodb"
+	environment = var.environment
+}
+
 # TODO: Replace this placeholder with a call to infra/modules/serverless-api.
 # Expected resources: API Gateway HTTP API, Lambda, DynamoDB, SNS, CloudWatch Logs, IAM.
 #
