@@ -15,7 +15,7 @@ def get_missing_fields(intake_record: IntakeRecord) -> list[str]:
     Returns:
         List of missing field names
     """
-    required_fields = ["employee_name", "location", "service_type", "outcome"]
+    required_fields = ["location", "service_type", "outcome"]
     return [
         field for field in required_fields
         if getattr(intake_record, field) is None
@@ -40,7 +40,6 @@ def generate_followup_question(missing_fields: list[str]) -> str:
 
     # Prioritize fields and ask about the most important one
     field_questions = {
-        "employee_name": "Could you please tell me your name?",
         "location": "Where did you perform this service call? Please provide the address or location.",
         "service_type": "What type of service did you perform? (e.g., HVAC, Plumbing, Electrical)",
         "outcome": "What was the outcome of the service call? (e.g., completed, needs_followup, escalated)",

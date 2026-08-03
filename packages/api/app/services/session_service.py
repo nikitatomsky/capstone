@@ -233,7 +233,7 @@ class SessionService:
 
         logger.info(
             f"Completed and removed session for chat_id={chat_id}, "
-            f"employee={completed_record.employee_name}"
+            f"location={completed_record.location}"
         )
 
         return completed_record

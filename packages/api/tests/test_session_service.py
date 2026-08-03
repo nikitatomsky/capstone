@@ -26,7 +26,6 @@ def test_create_new_session(session_service):
 
     intake_record = session["intake_record"]
     assert isinstance(intake_record, IntakeRecord)
-    assert intake_record.employee_name is None
     assert intake_record.location is None
     assert intake_record.service_type is None
     assert intake_record.outcome is None
@@ -41,13 +40,13 @@ def test_retrieve_existing_session(session_service):
 
     # Create initial session
     first_session = session_service.get_or_create_session(chat_id)
-    first_session["intake_record"].employee_name = "John Doe"
+    first_session["intake_record"].notes = "Test notes"
 
     # Retrieve the same session
     second_session = session_service.get_or_create_session(chat_id)
 
     assert second_session is not None
-    assert second_session["intake_record"].employee_name == "John Doe"
+    assert second_session["intake_record"].notes == "Test notes"
 
 
 def test_update_partial_intake_data(session_service):
@@ -58,14 +57,14 @@ def test_update_partial_intake_data(session_service):
     session_service.get_or_create_session(chat_id)
 
     # Update fields incrementally
-    session_service.update_intake_field(chat_id, "employee_name", "Jane Smith")
+    session_service.update_intake_field(chat_id, "notes", "Jane Smith notes")
     session_service.update_intake_field(chat_id, "location", "123 Main St")
 
     # Verify updates
     session = session_service.get_session(chat_id)
     assert session is not None
     intake_record = session["intake_record"]
-    assert intake_record.employee_name == "Jane Smith"
+    assert intake_record.notes == "Jane Smith notes"
     assert intake_record.location == "123 Main St"
     assert intake_record.service_type is None  # Still empty
     assert not session_service.is_complete(chat_id)  # Not yet complete
@@ -91,7 +90,6 @@ def test_check_record_completion(session_service):
     assert not session_service.is_complete(chat_id)
 
     # Fill required fields
-    session_service.update_intake_field(chat_id, "employee_name", "Mike Johnson")
     session_service.update_intake_field(chat_id, "location", "456 Oak Ave")
     session_service.update_intake_field(chat_id, "service_type", "HVAC Repair")
     session_service.update_intake_field(chat_id, "outcome", "completed")
@@ -131,7 +129,7 @@ def test_complete_session(session_service):
 
     # Create and populate session
     session_service.get_or_create_session(chat_id)
-    session_service.update_intake_field(chat_id, "employee_name", "Sarah Lee")
+    session_service.update_intake_field(chat_id, "notes", "Sarah Lee notes")
     session_service.update_intake_field(chat_id, "location", "789 Pine Rd")
     session_service.update_intake_field(chat_id, "service_type", "Plumbing")
     session_service.update_intake_field(chat_id, "outcome", "completed")
@@ -145,7 +143,7 @@ def test_complete_session(session_service):
 
     # Verify returned record has correct data
     assert completed_record is not None
-    assert completed_record.employee_name == "Sarah Lee"
+    assert completed_record.notes == "Sarah Lee notes"
     assert completed_record.location == "789 Pine Rd"
 
     # Verify session is removed
@@ -167,12 +165,12 @@ def test_update_nonexistent_session_creates_it(session_service):
     chat_id = 12345
 
     # Update should create session if it doesn't exist
-    session_service.update_intake_field(chat_id, "employee_name", "Auto Created")
+    session_service.update_intake_field(chat_id, "notes", "Auto Created")
 
     # Verify session was created
     session = session_service.get_session(chat_id)
     assert session is not None
-    assert session["intake_record"].employee_name == "Auto Created"
+    assert session["intake_record"].notes == "Auto Created"
 
 
 def test_update_invalid_field_raises_error(session_service):
@@ -213,7 +211,7 @@ def test_invalid_chat_id_in_all_methods(session_service):
 
     # Test update_intake_field
     with pytest.raises(ValueError, match="Invalid chat_id"):
-        session_service.update_intake_field(invalid_chat_id, "employee_name", "Test")
+        session_service.update_intake_field(invalid_chat_id, "notes", "Test")
 
     # Test is_complete
     with pytest.raises(ValueError, match="Invalid chat_id"):

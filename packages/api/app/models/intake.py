@@ -11,12 +11,11 @@ class IntakeRecord(BaseModel):
 
     This model captures information about a service call reported by a field employee.
     All fields are optional to support incremental data collection through conversation.
+    
+    Note: employee_name is NOT included - it's known from the assignment/technician
+    registration and doesn't need to be extracted from the conversation.
     """
 
-    employee_name: str | None = Field(
-        default=None,
-        description="Name of the field employee reporting the service call",
-    )
     location: str | None = Field(
         default=None,
         description="Service call location or address",
@@ -42,8 +41,7 @@ class IntakeRecord(BaseModel):
         """
         Check if the intake record has all required fields filled.
 
-        Required fields:
-        - employee_name
+        Required fields (employee_name removed - known from assignment):
         - location
         - service_type
         - outcome
@@ -53,7 +51,6 @@ class IntakeRecord(BaseModel):
         """
         return all(
             [
-                self.employee_name is not None,
                 self.location is not None,
                 self.service_type is not None,
                 self.outcome is not None,

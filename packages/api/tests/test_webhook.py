@@ -389,7 +389,6 @@ def test_multi_turn_conversation_progressively_fills_record(client, monkeypatch)
     # Check final state
     session = session_service.get_session(chat_id)
     record = session["intake_record"]
-    assert record.employee_name == "Jane Smith"
     assert record.location == "321 Pine Rd"
     assert record.service_type == "Electrical"
     assert record.outcome == "completed"
