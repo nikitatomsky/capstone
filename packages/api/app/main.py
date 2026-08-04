@@ -79,6 +79,9 @@ webhook.init_dependencies(
     generate_followup_question,
 )
 
+# Initialize health router with dependencies
+health.init_dependencies(session_service)
+
 # Include routers
 app.include_router(health.router)
 app.include_router(webhook.router)
