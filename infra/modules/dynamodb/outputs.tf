@@ -50,3 +50,19 @@ output "intake_records_assignment_index_name" {
   description = "Name of the AssignmentIndex GSI on intake_records table"
   value       = "AssignmentIndex"
 }
+
+# Telegram invitations table outputs
+output "telegram_invitations_table_name" {
+  description = "Name of the Telegram invitations DynamoDB table"
+  value       = aws_dynamodb_table.telegram_invitations.name
+}
+
+output "telegram_invitations_table_arn" {
+  description = "ARN of the Telegram invitations DynamoDB table"
+  value       = aws_dynamodb_table.telegram_invitations.arn
+}
+
+output "telegram_invitations_technician_index_name" {
+  description = "Name of the TechnicianIdIndex GSI on telegram_invitations table"
+  value       = "TechnicianIdIndex"
+}

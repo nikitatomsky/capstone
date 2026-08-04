@@ -1,0 +1,28 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadTelegramBotToken",
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:GetSecretValue"
+      ],
+      "Resource": "arn:aws:secretsmanager:*:*:secret:field-intake/*/telegram-bot-token*"
+    },
+    {
+      "Sid": "TelegramInvitationsTableAccess",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:PutItem",
+        "dynamodb:GetItem",
+        "dynamodb:UpdateItem",
+        "dynamodb:DeleteItem",
+        "dynamodb:Query"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:*:*:table/*-telegram-invitations-*",
+        "arn:aws:dynamodb:*:*:table/*-telegram-invitations-*/index/*"
+      ]
+    }
+  ]
+}

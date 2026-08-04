@@ -268,4 +268,217 @@ def test_cors_headers_present_on_preflight():
 
 ---
 
+## Infrastructure Patterns
+
+### Secrets Manager Integration Pattern
+
+**Problem**: Need to store sensitive credentials (API keys, tokens) without committing to source control or Terraform state.
+
+**Solution**: Terraform creates empty secret resource; value populated manually.
+
+```hcl
+# Terraform creates the secret container
+resource "aws_secretsmanager_secret" "telegram_bot_token" {
+  name        = "${var.project_name}/${var.environment}/telegram-bot-token"
+  description = "Telegram bot token for field intake service"
+}
+
+# Secret value is optional (set manually)
+resource "aws_secretsmanager_secret_version" "telegram_bot_token" {
+  count         = var.telegram_bot_token != "" ? 1 : 0
+  secret_id     = aws_secretsmanager_secret.telegram_bot_token.id
+  secret_string = var.telegram_bot_token
+}
+```
+
+**Manual secret value setting**:
+
+```bash
+# Retrieve token from local .env
+TOKEN=$(grep TELEGRAM_BOT_TOKEN packages/api/.env | cut -d '=' -f2)
+
+# Store in Secrets Manager
+aws secretsmanager put-secret-value \
+  --secret-id field-intake/dev/telegram-bot-token \
+  --secret-string "$TOKEN"
+```
+
+**Application runtime retrieval**:
+
+```python
+import boto3
+
+def get_telegram_bot_token():
+    """Retrieve bot token from Secrets Manager."""
+    client = boto3.client('secretsmanager', region_name=os.getenv('AWS_REGION'))
+    response = client.get_secret_value(
+        SecretId=os.getenv('TELEGRAM_BOT_TOKEN_SECRET_NAME')
+    )
+    return response['SecretString']
+```
+
+**Why**:
+- Secrets never appear in Terraform state files
+- Secrets never committed to source control
+- Secret rotation possible without code changes
+- IAM controls who can read secrets
+- Audit trail of secret access in CloudTrail
+
+**When to use**:
+- API keys, tokens, passwords
+- Database credentials
+- OAuth client secrets
+- Any sensitive configuration value
+
+---
+
+### DynamoDB TTL for Temporary Data
+
+**Problem**: Need to automatically clean up temporary data (invitation tokens, session data, cache entries) without manual intervention.
+
+**Solution**: Use DynamoDB Time-to-Live (TTL) feature.
+
+```hcl
+resource "aws_dynamodb_table" "telegram_invitations" {
+  name         = "field-intake-telegram-invitations-${var.environment}"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "token_hash"
+
+  # ... attributes ...
+
+  # Enable TTL for automatic cleanup
+  ttl {
+    attribute_name = "expires_at_ttl"
+    enabled        = true
+  }
+}
+```
+
+**Application code**:
+
+```python
+import time
+
+def create_invitation_token(technician_id: str, ttl_seconds: int = 3600):
+    """Create invitation token with expiration."""
+    token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    
+    # TTL attribute must be Unix timestamp (seconds since epoch)
+    expires_at_ttl = int(time.time()) + ttl_seconds
+    
+    dynamodb.put_item(
+        TableName='telegram-invitations',
+        Item={
+            'token_hash': {'S': token_hash},
+            'technician_id': {'S': technician_id},
+            'expires_at_ttl': {'N': str(expires_at_ttl)},  # DynamoDB requires string
+            'created_at': {'S': datetime.utcnow().isoformat()}
+        }
+    )
+    
+    return token  # Return original token (not hash)
+```
+
+**Why**:
+- Automatic cleanup (no cron jobs needed)
+- Reduces storage costs
+- Items deleted within 48 hours of expiration
+- No operational overhead
+- Scales automatically with table size
+
+**When to use**:
+- Invitation tokens, password reset tokens
+- Session data, temporary caches
+- Rate limiting counters
+- Audit logs with retention policy
+- Any data with defined expiration
+
+**Important notes**:
+- TTL attribute must be Unix timestamp (seconds since epoch)
+- DynamoDB stores as number, so cast to string in put_item
+- Deletion happens within 48 hours (not instant)
+- TTL deletes don't consume write capacity
+- Deleted items don't appear in queries immediately
+
+---
+
+### IAM Policy Scoping by Environment
+
+**Problem**: Need to grant access to environment-specific resources without hard-coding ARNs or granting overly broad permissions.
+
+**Solution**: Use wildcard patterns with environment suffix in IAM policies.
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadTelegramBotToken",
+      "Effect": "Allow",
+      "Action": ["secretsmanager:GetSecretValue"],
+      "Resource": "arn:aws:secretsmanager:*:*:secret:field-intake/*/telegram-bot-token*"
+    },
+    {
+      "Sid": "TelegramInvitationsTableAccess",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:PutItem",
+        "dynamodb:GetItem",
+        "dynamodb:UpdateItem",
+        "dynamodb:DeleteItem",
+        "dynamodb:Query"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:*:*:table/*-telegram-invitations-*",
+        "arn:aws:dynamodb:*:*:table/*-telegram-invitations-*/index/*"
+      ]
+    }
+  ]
+}
+```
+
+**Terraform IAM policy resource**:
+
+```hcl
+resource "aws_iam_policy" "telegram_backend_policy" {
+  name        = "${var.project_name}-telegram-backend-${var.environment}"
+  description = "Policy for backend to access Telegram bot token and invitations"
+  policy      = file("${path.module}/telegram-backend-policy.json")
+}
+```
+
+**Why**:
+- Prevents cross-environment access (dev can't access prod)
+- Allows flexibility (works across regions)
+- Least-privilege principle (specific resources, not `*`)
+- Environment-specific policy names prevent conflicts
+- Easy to audit (clear resource patterns)
+
+**Pattern matching**:
+- `field-intake/*/telegram-bot-token*` matches:
+  - ✅ `field-intake/dev/telegram-bot-token`
+  - ✅ `field-intake/staging/telegram-bot-token`
+  - ✅ `field-intake/prod/telegram-bot-token`
+  - ❌ `other-project/dev/telegram-bot-token`
+- `*-telegram-invitations-*` matches:
+  - ✅ `field-intake-telegram-invitations-dev`
+  - ✅ `field-intake-telegram-invitations-prod`
+  - ❌ `field-intake-assignments-dev`
+
+**When to use**:
+- Multi-environment deployments (dev, staging, prod)
+- Resources with predictable naming conventions
+- Least-privilege IAM policies
+- Cross-region resource access
+- Terraform-managed infrastructure
+
+**Anti-patterns to avoid**:
+- ❌ Hard-coding account IDs in policies (use `*`)
+- ❌ Using `Resource: "*"` (too broad)
+- ❌ Granting `AdministratorAccess` (violates least-privilege)
+- ❌ Not scoping by project name (allows access to other projects)
+
+---
+
 *This file will grow as implementation patterns emerge through TDD.*
