@@ -15,19 +15,22 @@ from app.models.assignment import Assignment, AssignmentCreate
 from app.models.technician import Technician, TechnicianCreate
 from app.repositories.assignment_repository import (
     AssignmentRepository,
-    FakeAssignmentRepository,
+    DynamoDBAssignmentRepository,
 )
 
 router = APIRouter(tags=["assignments"])
 
 # Dependency injection for repository
-# In production, this would use DynamoDBAssignmentRepository
-# For now, use Fake for testing and local development
-_repository_instance = FakeAssignmentRepository()
+# Using DynamoDB for production-ready persistence
+# Tests continue to use FakeAssignmentRepository for isolation
+_repository_instance: AssignmentRepository | None = None
 
 
 def get_assignment_repo() -> AssignmentRepository:
     """Dependency that provides assignment repository."""
+    global _repository_instance
+    if _repository_instance is None:
+        _repository_instance = DynamoDBAssignmentRepository()
     return _repository_instance
 
 

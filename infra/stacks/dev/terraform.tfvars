@@ -1,6 +1,6 @@
 project_name                    = "field-intake-service"
 environment                     = "dev"
-aws_region                      = "<aws-region>"
+aws_region                      = "us-east-1"
 lambda_runtime                  = "python3.12"
 lambda_handler                  = "app.lambda_handler.handler"
 lambda_artifact_path            = "<lambda-artifact-path>"

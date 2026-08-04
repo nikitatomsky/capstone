@@ -34,37 +34,55 @@ def client():
 
 
 @pytest.fixture(autouse=True)
+def setup_test_repository(monkeypatch):
+    """
+    Automatically mock assignment repository for all tests.
+
+    This prevents tests from connecting to AWS DynamoDB
+    and provides fast in-memory storage for test isolation.
+    """
+    import app.routers.assignment
+    from app.repositories.assignment_repository import FakeAssignmentRepository
+
+    # Use in-memory fake repository for all tests
+    fake_repo = FakeAssignmentRepository()
+    monkeypatch.setattr(app.routers.assignment, "_repository_instance", fake_repo)
+
+
+@pytest.fixture(autouse=True)
 def setup_webhook_mocks(monkeypatch):
     """
     Automatically mock webhook dependencies for all tests.
-    
+
     This prevents tests from calling the real Anthropic API
     and provides consistent mock implementations.
     """
     import app.routers.webhook
     from app.services.session_service import SessionService
-    
+
     # Create fresh session service for each test
     session_service = SessionService()
-    
+
     # Mock extraction service (returns empty dict by default)
     class MockExtractionService:
         def extract_from_message(self, text):
             return {}
-    
+
     extraction_service = MockExtractionService()
-    
+
     # Mock telegram client
     class MockTelegramClient:
         async def send_message(self, chat_id, text):
             pass
-    
+
     telegram_client = MockTelegramClient()
-    
+
     # Inject all dependencies
     monkeypatch.setattr(app.routers.webhook, "session_service", session_service)
     monkeypatch.setattr(app.routers.webhook, "extraction_service", extraction_service)
     monkeypatch.setattr(app.routers.webhook, "telegram_client", telegram_client)
     monkeypatch.setattr(app.routers.webhook, "_truncate_for_log", _truncate_for_log)
     monkeypatch.setattr(app.routers.webhook, "get_missing_fields", _get_missing_fields)
-    monkeypatch.setattr(app.routers.webhook, "generate_followup_question", _generate_followup_question)
+    monkeypatch.setattr(
+        app.routers.webhook, "generate_followup_question", _generate_followup_question
+    )
