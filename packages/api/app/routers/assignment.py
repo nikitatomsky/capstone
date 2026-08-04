@@ -9,6 +9,8 @@ Provides endpoints for managing assignments and technicians:
 - GET /api/technicians - List all technicians
 """
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.models.assignment import Assignment, AssignmentCreate
@@ -19,11 +21,21 @@ from app.repositories.assignment_repository import (
 )
 
 router = APIRouter(tags=["assignments"])
+logger = logging.getLogger(__name__)
 
 # Dependency injection for repository
 # In production, this would use DynamoDBAssignmentRepository
 # For now, use Fake for testing and local development
 _repository_instance = FakeAssignmentRepository()
+
+# Telegram client for sending notifications
+telegram_client = None
+
+
+def init_dependencies(telegram_cl):
+    """Initialize router dependencies (called from main.py)."""
+    global telegram_client
+    telegram_client = telegram_cl
 
 
 def get_assignment_repo() -> AssignmentRepository:
@@ -37,7 +49,7 @@ async def create_assignment(
     repo: AssignmentRepository = Depends(get_assignment_repo)
 ) -> Assignment:
     """
-    Create a new assignment.
+    Create a new assignment and notify the technician via Telegram.
 
     Args:
         assignment_data: Assignment creation data (technician, title, description, priority)
@@ -56,6 +68,33 @@ async def create_assignment(
     )
 
     created_assignment = repo.create_assignment(assignment)
+    
+    # Send Telegram notification to technician (Step 2-2)
+    if telegram_client:
+        notification_message = (
+            f"🔔 **New Assignment**\n\n"
+            f"**Title**: {created_assignment.title}\n"
+            f"**Description**: {created_assignment.description}\n"
+            f"**Priority**: {created_assignment.priority}\n\n"
+            f"Please respond when you start working on this task."
+        )
+        try:
+            await telegram_client.send_message(
+                created_assignment.technician_chat_id,
+                notification_message
+            )
+            logger.info(
+                f"Sent assignment notification to chat_id={created_assignment.technician_chat_id} "
+                f"for assignment_id={created_assignment.assignment_id}"
+            )
+        except Exception as e:
+            logger.error(
+                f"Failed to send Telegram notification for assignment {created_assignment.assignment_id}: {e}"
+            )
+            # Don't fail the request if notification fails
+    else:
+        logger.warning("Telegram client not available - notification not sent")
+    
     return created_assignment
 
 

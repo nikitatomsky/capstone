@@ -29,7 +29,7 @@ class AnthropicProvider(LLMProvider):
     def __init__(
         self,
         api_key: str | None = None,
-        model: str = "claude-3-5-sonnet-20240620",
+        model: str = "claude-sonnet-5",
         max_tokens: int = DEFAULT_MAX_TOKENS,
         timeout: int = DEFAULT_TIMEOUT_SECONDS,
     ):
@@ -92,7 +92,16 @@ class AnthropicProvider(LLMProvider):
             )
 
             duration = time.time() - start_time
-            result = response.content[0].text
+            
+            # Extract text from response content, handling both TextBlock and ThinkingBlock
+            result = ""
+            for block in response.content:
+                if hasattr(block, "text"):
+                    result = block.text
+                    break
+            
+            if not result:
+                raise LLMAPIError("No text content in LLM response")
             
             # Log usage metrics for cost tracking
             logger.info(

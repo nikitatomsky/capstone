@@ -70,6 +70,8 @@ def _truncate_for_log(text: str | None, max_length: int = MAX_LOG_MESSAGE_LENGTH
 
 
 # Initialize webhook router with dependencies
+from app.routers.assignment import _repository_instance as assignment_repo
+
 webhook.init_dependencies(
     session_service,
     extraction_service,
@@ -77,10 +79,14 @@ webhook.init_dependencies(
     _truncate_for_log,
     get_missing_fields,
     generate_followup_question,
+    assignment_repo,  # Pass the assignment repository
 )
 
 # Initialize health router with dependencies
 health.init_dependencies(session_service)
+
+# Initialize assignment router with dependencies
+assignment.init_dependencies(telegram_client)
 
 # Include routers
 app.include_router(health.router)

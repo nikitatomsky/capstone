@@ -322,9 +322,9 @@ def test_webhook_completes_intake_when_all_fields_present(client, monkeypatch):
 
     assert response.status_code == 200
 
-    # Check record is complete
+    # Verify session was removed after completion (prevents reprocessing)
     session = session_service.get_session(55555)
-    assert session["intake_record"].is_complete()
+    assert session is None, "Session should be removed after completion"
 
     # Check confirmation message was sent
     assert len(telegram_client.sent_messages) >= 2
@@ -382,26 +382,26 @@ def test_multi_turn_conversation_progressively_fills_record(client, monkeypatch)
     ]
 
     chat_id = 77777
-    for msg in messages:
+    for i, msg in enumerate(messages):
         payload = get_sample_telegram_update(msg, chat_id=chat_id)
         client.post("/webhook", json=payload)
 
-    # Check final state
+        # Session should exist until last message
+        if i < len(messages) - 1:
+            session = session_service.get_session(chat_id)
+            assert session is not None, f"Session should exist after message {i+1}"
+
+    # After final message, session should be removed (record completed)
     session = session_service.get_session(chat_id)
-    record = session["intake_record"]
-    assert record.location == "321 Pine Rd"
-    assert record.service_type == "Electrical"
-    assert record.outcome == "completed"
-    assert record.is_complete()
+    assert session is None, "Session should be removed after completion"
 
-    # Check message content
-    assert session["conversation_history"][0]["message"] == messages[0]
-    assert session["conversation_history"][1]["message"] == messages[1]
-    assert session["conversation_history"][2]["message"] == messages[2]
-
-    # Each message should have a timestamp
-    for entry in session["conversation_history"]:
-        assert "timestamp" in entry
+    # Verify completion message was sent
+    assert len(telegram_client.sent_messages) == len(messages)
+    last_message = telegram_client.sent_messages[-1][1]
+    assert any(
+        keyword in last_message.lower()
+        for keyword in ["complete", "thank", "received", "confirmed", "recorded"]
+    )
 
 
 def test_webhook_tracks_different_chats_separately(client, monkeypatch):
