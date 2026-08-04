@@ -11,11 +11,15 @@ class IntakeRecord(BaseModel):
 
     This model captures information about a service call reported by a field employee.
     All fields are optional to support incremental data collection through conversation.
-    
+
     Note: employee_name is NOT included - it's known from the assignment/technician
     registration and doesn't need to be extracted from the conversation.
     """
 
+    assignment_id: str | None = Field(
+        default=None,
+        description="Link to the assignment that initiated this intake (if applicable)",
+    )
     location: str | None = Field(
         default=None,
         description="Service call location or address",

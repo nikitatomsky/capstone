@@ -488,3 +488,220 @@ def test_webhook_handles_various_message_types(client):
         assert response.status_code == 200, f"Failed for text: {text}"
         data = response.json()
         assert data.get("received_text") == text
+
+
+# ============================================================================
+# Integration Tests: Webhook-Assignment Integration (Step 2-3)
+# ============================================================================
+
+
+def test_webhook_links_session_to_active_assignment(client, monkeypatch):
+    """Test that webhook finds and links technician's session to their active assignment."""
+    from app.models.assignment import Assignment
+    from app.repositories.assignment_repository import FakeAssignmentRepository
+    from app.services.session_service import SessionService
+
+    # Create repository and session service
+    repo = FakeAssignmentRepository()
+    session_service = SessionService()
+
+    # Create an active assignment for a technician
+    assignment = Assignment(
+        technician_chat_id=12345,
+        technician_name="John Technician",
+        title="Fix HVAC at Building A",
+        description="Check and repair HVAC system",
+        priority="high",
+        status="assigned"
+    )
+    repo.create_assignment(assignment)
+
+    # Inject dependencies
+    import app.routers.webhook
+    monkeypatch.setattr(app.routers.webhook, "session_service", session_service)
+    monkeypatch.setattr(app.routers.webhook, "assignment_repository", repo)
+
+    # Technician sends a message
+    payload = get_sample_telegram_update("Starting work on HVAC", chat_id=12345)
+    response = client.post("/webhook", json=payload)
+
+    assert response.status_code == 200
+
+    # Session should be linked to the assignment
+    session = session_service.get_session(12345)
+    assert session is not None
+    assert session["intake_record"].assignment_id == assignment.assignment_id
+
+
+def test_webhook_updates_assignment_status_to_in_progress(client, monkeypatch):
+    """Test that webhook updates assignment status to 'in_progress' when technician responds."""
+    from app.models.assignment import Assignment
+    from app.repositories.assignment_repository import FakeAssignmentRepository
+    from app.services.session_service import SessionService
+
+    repo = FakeAssignmentRepository()
+    session_service = SessionService()
+
+    # Create assignment in "assigned" status
+    assignment = Assignment(
+        technician_chat_id=67890,
+        technician_name="Jane Worker",
+        title="Plumbing repair",
+        description="Fix leaking pipe",
+        priority="urgent",
+        status="assigned"  # Initial status
+    )
+    created = repo.create_assignment(assignment)
+
+    # Inject dependencies
+    import app.routers.webhook
+    monkeypatch.setattr(app.routers.webhook, "session_service", session_service)
+    monkeypatch.setattr(app.routers.webhook, "assignment_repository", repo)
+
+    # Technician responds (first message)
+    payload = get_sample_telegram_update("I'm at the site now", chat_id=67890)
+    response = client.post("/webhook", json=payload)
+
+    assert response.status_code == 200
+
+    # Assignment status should be updated to "in_progress"
+    updated_assignment = repo.get_assignment(created.assignment_id)
+    assert updated_assignment is not None
+    assert updated_assignment.status == "in_progress"
+
+
+def test_webhook_links_completed_intake_to_assignment(client, monkeypatch):
+    """Test that webhook updates assignment with intake_record_id when intake is complete."""
+    from app.models.assignment import Assignment
+    from app.repositories.assignment_repository import FakeAssignmentRepository
+    from app.services.session_service import SessionService
+
+    repo = FakeAssignmentRepository()
+    session_service = SessionService()
+
+    # Create assignment
+    assignment = Assignment(
+        technician_chat_id=11111,
+        technician_name="Bob Technician",
+        title="Electrical work",
+        description="Install new outlets",
+        priority="medium",
+        status="in_progress"
+    )
+    created = repo.create_assignment(assignment)
+
+    # Mock extraction that provides all required fields
+    class MockExtraction:
+        def extract_from_message(self, text):
+            return {
+                "location": "456 Oak Ave",
+                "service_type": "Electrical",
+                "outcome": "completed"
+            }
+
+    class MockTelegram:
+        async def send_message(self, chat_id, text):
+            pass
+
+    extraction_service = MockExtraction()
+    telegram_client = MockTelegram()
+
+    # Inject dependencies
+    import app.routers.webhook
+    monkeypatch.setattr(app.routers.webhook, "session_service", session_service)
+    monkeypatch.setattr(app.routers.webhook, "assignment_repository", repo)
+    monkeypatch.setattr(app.routers.webhook, "extraction_service", extraction_service)
+    monkeypatch.setattr(app.routers.webhook, "telegram_client", telegram_client)
+
+    # Technician sends message that completes the intake
+    payload = get_sample_telegram_update(
+        "Electrical work at 456 Oak Ave completed successfully",
+        chat_id=11111
+    )
+    response = client.post("/webhook", json=payload)
+
+    assert response.status_code == 200
+
+    # Assignment should be updated with intake_record_id and status "completed"
+    updated_assignment = repo.get_assignment(created.assignment_id)
+    assert updated_assignment is not None
+    assert updated_assignment.status == "completed"
+    assert updated_assignment.intake_record_id is not None
+    assert updated_assignment.completed_at is not None
+
+
+def test_webhook_works_without_assignment(client, monkeypatch):
+    """Test that webhook still works when technician has no active assignment (backwards compat)."""
+    from app.repositories.assignment_repository import FakeAssignmentRepository
+    from app.services.session_service import SessionService
+
+    repo = FakeAssignmentRepository()
+    session_service = SessionService()
+
+    # Inject dependencies (repository is empty - no assignments)
+    import app.routers.webhook
+    monkeypatch.setattr(app.routers.webhook, "session_service", session_service)
+    monkeypatch.setattr(app.routers.webhook, "assignment_repository", repo)
+
+    # Technician sends message without having an assignment
+    payload = get_sample_telegram_update("Random message", chat_id=99999)
+    response = client.post("/webhook", json=payload)
+
+    # Should still work (for backwards compatibility)
+    assert response.status_code == 200
+
+    # Session should be created but without assignment link
+    session = session_service.get_session(99999)
+    assert session is not None
+    assert session["intake_record"].assignment_id is None
+
+
+def test_webhook_handles_multiple_assignments_correctly(client, monkeypatch):
+    """Test that webhook links to the most recent active assignment if multiple exist."""
+    import time
+
+    from app.models.assignment import Assignment
+    from app.repositories.assignment_repository import FakeAssignmentRepository
+    from app.services.session_service import SessionService
+
+    repo = FakeAssignmentRepository()
+    session_service = SessionService()
+
+    # Create two assignments for the same technician
+    assignment1 = Assignment(
+        technician_chat_id=33333,
+        technician_name="Multi Worker",
+        title="Old task",
+        description="Older assignment",
+        priority="low",
+        status="assigned"
+    )
+    repo.create_assignment(assignment1)
+
+    # Small delay to ensure different timestamps
+    time.sleep(0.01)
+
+    assignment2 = Assignment(
+        technician_chat_id=33333,
+        technician_name="Multi Worker",
+        title="New task",
+        description="Newer assignment",
+        priority="high",
+        status="assigned"
+    )
+    created2 = repo.create_assignment(assignment2)
+
+    # Inject dependencies
+    import app.routers.webhook
+    monkeypatch.setattr(app.routers.webhook, "session_service", session_service)
+    monkeypatch.setattr(app.routers.webhook, "assignment_repository", repo)
+
+    # Technician sends message
+    payload = get_sample_telegram_update("Working on it", chat_id=33333)
+    response = client.post("/webhook", json=payload)
+
+    assert response.status_code == 200
+
+    # Should link to the most recent assignment
+    session = session_service.get_session(33333)
+    assert session["intake_record"].assignment_id == created2.assignment_id
