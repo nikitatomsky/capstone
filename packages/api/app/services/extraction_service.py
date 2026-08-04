@@ -58,7 +58,6 @@ class ExtractionService:
         Returns:
             Dict with extracted field names and values, e.g.:
             {
-                "employee_name": "John Doe",
                 "location": "123 Main St",
                 "service_type": "HVAC Repair",
                 "outcome": "completed"
@@ -96,14 +95,26 @@ class ExtractionService:
         # Get LLM response
         response = self.llm_provider.generate(prompt, EXTRACTION_SYSTEM_PROMPT)
 
-        # Parse JSON response
+        # Parse JSON response (strip markdown code blocks if present)
         try:
-            extracted_data = json.loads(response)
+            # Remove markdown code blocks if present
+            json_text = response.strip()
+            if json_text.startswith("```"):
+                # Remove opening ```json or ```
+                lines = json_text.split("\n")
+                if lines[0].startswith("```"):
+                    lines = lines[1:]
+                # Remove closing ```
+                if lines and lines[-1].strip() == "```":
+                    lines = lines[:-1]
+                json_text = "\n".join(lines)
+
+            extracted_data = json.loads(json_text)
             logger.info(f"Extracted {len(extracted_data)} fields from message")
-            
+
             # Validate against IntakeRecord schema
             self._validate_extracted_data(extracted_data)
-            
+
             return extracted_data
         except json.JSONDecodeError as e:
             logger.exception(
@@ -117,15 +128,15 @@ class ExtractionService:
     def _validate_extracted_data(self, data: dict[str, Any]) -> None:
         """
         Validate extracted data against IntakeRecord schema.
-        
+
         Logs warnings if validation fails but doesn't raise exceptions,
         allowing partial data to be used.
-        
+
         Args:
             data: Extracted data dictionary
         """
         from app.models.intake import IntakeRecord
-        
+
         try:
             # Attempt to validate with Pydantic model
             IntakeRecord(**data)

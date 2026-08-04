@@ -145,6 +145,10 @@ async def webhook(update: TelegramUpdate):
                         f"with intake_record_id={intake_record_id}"
                     )
 
+            # Complete and remove session to prevent reprocessing
+            session_service.complete_session(chat_id)
+            logger.info(f"Session closed for chat_id={chat_id}")
+
             # TODO: Persist to database and send notification (Step 1-6)
             response_text = (
                 "Thank you! I have all the information I need. "
