@@ -2,6 +2,8 @@
 Assignment and related models for admin-initiated assignment workflow.
 
 Architecture reference: docs/path-to-reactive-flow.md lines 60-70
+
+Updated for Issue #30: Assignment now references technician by UUID (technician_id)
 """
 
 from datetime import UTC, datetime
@@ -18,6 +20,8 @@ class Assignment(BaseModel):
     An assignment represents work assigned to a field technician by an admin.
     The assignment tracks status from creation through completion, and links
     to the completed intake record when the technician finishes the work.
+
+    Issue #30: Now references technician by UUID (technician_id) instead of chat_id.
     """
 
     assignment_id: str = Field(
@@ -25,8 +29,8 @@ class Assignment(BaseModel):
         description="Unique identifier for the assignment (UUID)"
     )
 
-    technician_chat_id: int = Field(
-        description="Telegram chat_id of the assigned technician"
+    technician_id: str = Field(
+        description="UUID of the assigned technician"
     )
 
     technician_name: str = Field(
@@ -76,14 +80,11 @@ class AssignmentCreate(BaseModel):
     Request model for creating a new assignment.
 
     Used by the POST /api/assignments endpoint.
+    Issue #30: Uses technician_id (UUID) instead of chat_id.
     """
 
-    technician_chat_id: int = Field(
-        description="Telegram chat_id of the technician to assign work to"
-    )
-
-    technician_name: str = Field(
-        description="Display name of the technician"
+    technician_id: str = Field(
+        description="UUID of the technician to assign work to"
     )
 
     title: str = Field(

@@ -20,7 +20,7 @@ def test_create_assignment():
 
     assignment = Assignment(
         assignment_id="test-123",
-        technician_chat_id=12345678,
+        technician_id="tech-uuid-111",
         technician_name="John Smith",
         title="HVAC Repair",
         description="Fix heating system",
@@ -44,7 +44,7 @@ def test_get_assignment_by_id():
 
     assignment = Assignment(
         assignment_id="test-123",
-        technician_chat_id=12345678,
+        technician_id="tech-uuid-111",
         technician_name="John Smith",
         title="HVAC Repair",
         description="Fix heating system",
@@ -90,7 +90,7 @@ def test_list_assignments_all():
 
     assignment1 = Assignment(
         assignment_id="test-1",
-        technician_chat_id=12345678,
+        technician_id="tech-uuid-111",
         technician_name="John Smith",
         title="Assignment 1",
         description="Description 1",
@@ -99,7 +99,7 @@ def test_list_assignments_all():
 
     assignment2 = Assignment(
         assignment_id="test-2",
-        technician_chat_id=87654321,
+        technician_id="tech-uuid-222",
         technician_name="Jane Doe",
         title="Assignment 2",
         description="Description 2",
@@ -127,7 +127,7 @@ def test_list_assignments_filtered_by_status():
 
     pending = Assignment(
         assignment_id="pending-1",
-        technician_chat_id=12345678,
+        technician_id="tech-uuid-111",
         technician_name="John Smith",
         title="Pending Assignment",
         description="Description",
@@ -137,7 +137,7 @@ def test_list_assignments_filtered_by_status():
 
     completed = Assignment(
         assignment_id="completed-1",
-        technician_chat_id=87654321,
+        technician_id="tech-uuid-222",
         technician_name="Jane Doe",
         title="Completed Assignment",
         description="Description",
@@ -172,7 +172,7 @@ def test_update_assignment_status():
 
     assignment = Assignment(
         assignment_id="test-123",
-        technician_chat_id=12345678,
+        technician_id="tech-uuid-111",
         technician_name="John Smith",
         title="HVAC Repair",
         description="Fix heating system",

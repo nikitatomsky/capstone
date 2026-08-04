@@ -987,3 +987,412 @@ Once the MVP workflow is validated with Swagger UI and DynamoDB:
 6. No backend changes needed - just frontend addition
 
 The API-first approach means the React SPA can be built independently without touching backend code.
+
+---
+
+## Phase 4: Telegram Bot Invitation System (Secure Chat ID Linking)
+
+### Overview
+
+Currently, technicians must manually message the bot first to get their `chat_id`, which is then manually registered by admins. This phase implements a secure, automated invitation system where:
+
+1. Admin creates a technician in the UI with phone number
+2. System generates a secure one-time invitation token
+3. System sends SMS with Telegram deeplink: `https://t.me/<BOT>?start=<TOKEN>`
+4. Technician taps link, opens Telegram, and starts bot
+5. Telegram webhook receives `/start <TOKEN>` with technician's `chat_id`
+6. Backend validates token and automatically links `technician_id ↔ chat_id`
+7. Confirmation message sent via Telegram
+8. Admin sees "Connected" status in UI
+
+### Architecture Alignment
+
+**Current Stack:**
+- ✅ FastAPI backend (not generic Lambda)
+- ✅ Terraform IaC (not AWS CDK)
+- ✅ DynamoDB with UUID-based technicians
+- ✅ Telegram webhook endpoint exists
+- ✅ React SPA with technician management
+
+**New Components:**
+- AWS Secrets Manager for Telegram bot token
+- DynamoDB table for invitation tokens
+- SNS for SMS delivery (or existing provider)
+- Webhook validation middleware
+- Token generation service
+- SMS integration service
+
+### Implementation Steps
+
+#### Step 4-0: Telegram Bot Invitation Infrastructure
+
+**Goal:** Set up DynamoDB table for invitation tokens and Secrets Manager for bot token.
+
+**Tasks:**
+1. Create Terraform module for telegram-invitations DynamoDB table
+   - Primary key: `token_hash` (string)
+   - Attributes: `technician_id`, `expires_at`, `used_at`, `created_at`
+   - TTL attribute: `expires_at`
+   - GSI: `TechnicianIdIndex` (for looking up by technician)
+
+2. Create AWS Secrets Manager secret for Telegram bot token
+   - Secret name: `field-intake/<environment>/telegram-bot-token`
+   - Store bot token value
+   - Configure IAM permissions for Lambda/API to read
+
+3. Add environment variables to backend:
+   ```
+   TELEGRAM_BOT_USERNAME=<your_bot>
+   TELEGRAM_BOT_TOKEN_SECRET_NAME=field-intake/dev/telegram-bot-token
+   TELEGRAM_INVITATION_TTL_SECONDS=3600
+   AWS_REGION=us-east-1
+   ```
+
+4. Update Terraform to provision:
+   - DynamoDB invitation table
+   - Secrets Manager secret
+   - IAM role with minimal permissions
+
+**Success Criteria:**
+- Terraform applies successfully
+- DynamoDB table visible in AWS console
+- Secret stored in Secrets Manager
+- Backend can read secret via boto3
+
+---
+
+#### Step 4-1: Implement Invitation Token Service (TDD)
+
+**Goal:** Create backend service to generate secure invitation tokens and deeplinks.
+
+**Tasks:**
+1. Create `TelegramInvitationService` with methods:
+   ```python
+   def generate_invitation(technician_id: str) -> TelegramInvitation:
+       """Generate secure token, store hash, return deeplink."""
+   
+   def validate_token(token: str) -> str | None:
+       """Validate token, return technician_id if valid, mark as used."""
+   
+   def cleanup_expired() -> int:
+       """Remove expired invitations (optional cleanup job)."""
+   ```
+
+2. Implement token generation:
+   - Use `secrets.token_urlsafe(32)` for cryptographic randomness
+   - Hash token with SHA-256 before storing
+   - Store only hash in DynamoDB (never raw token)
+   - Set expiration (default 1 hour)
+   - Generate Telegram deeplink: `https://t.me/{BOT_USERNAME}?start={token}`
+
+3. Create Pydantic models:
+   ```python
+   class TelegramInvitation(BaseModel):
+       token_hash: str
+       technician_id: str
+       telegram_link: str
+       expires_at: datetime
+       created_at: datetime
+       used_at: datetime | None = None
+   ```
+
+4. Write comprehensive tests (TDD):
+   - Token generation produces valid URL-safe tokens
+   - Token hash is SHA-256 hex string
+   - Deeplink format correct
+   - Token validation succeeds for valid token
+   - Token validation fails for expired token
+   - Token validation fails for already-used token
+   - Token validation fails for invalid token
+   - Token can only be used once
+
+**Success Criteria:**
+- All tests pass
+- Tokens are cryptographically secure
+- Only hash stored in DynamoDB
+- Tokens expire correctly
+- Tokens are single-use
+
+---
+
+#### Step 4-2: Telegram Webhook Token Validation
+
+**Goal:** Extend webhook endpoint to handle `/start <TOKEN>` and link chat_id.
+
+**Tasks:**
+1. Update webhook handler to detect `/start` command:
+   ```python
+   if message_text.startswith('/start '):
+       token = message_text.split(' ', 1)[1]
+       await handle_telegram_invitation(token, chat_id, update)
+       return
+   ```
+
+2. Implement `handle_telegram_invitation`:
+   - Validate token via `TelegramInvitationService.validate_token()`
+   - Get `technician_id` from validated token
+   - Update technician record with `chat_id`
+   - Mark invitation as used
+   - Send confirmation message via Telegram
+   - Handle errors gracefully (expired, invalid, already used)
+
+3. Add Telegram webhook validation (optional security):
+   - Validate Telegram IP ranges (if configured)
+   - Verify webhook secret token (if configured)
+   - Implement idempotency using `update_id`
+
+4. Add tests:
+   - `/start` with valid token links chat_id
+   - `/start` with expired token returns error message
+   - `/start` with used token returns error message
+   - `/start` with invalid token returns error message
+   - Duplicate webhook (same update_id) is idempotent
+   - Regular messages (non-/start) work normally
+
+**Success Criteria:**
+- Webhook handles `/start <TOKEN>` correctly
+- Chat ID automatically linked to technician
+- Confirmation message sent
+- Errors handled gracefully
+- Idempotent processing
+- Existing webhook functionality preserved
+
+---
+
+#### Step 4-3: SMS Integration with Deeplinks (Backend API)
+
+**Goal:** Add API endpoint to create invitation and send SMS.
+
+**Tasks:**
+1. Create POST `/api/technicians/{technician_id}/telegram-invitation` endpoint:
+   ```python
+   @router.post("/{technician_id}/telegram-invitation")
+   async def create_telegram_invitation(
+       technician_id: str,
+       repo: TechnicianRepository = Depends(get_technician_repo),
+       invitation_service: TelegramInvitationService = Depends(get_invitation_service),
+       sms_service: SMSService = Depends(get_sms_service)
+   ):
+       # Get technician
+       technician = repo.get_technician(technician_id)
+       if not technician:
+           raise HTTPException(404, "Technician not found")
+       
+       # Generate invitation
+       invitation = invitation_service.generate_invitation(technician_id)
+       
+       # Send SMS
+       await sms_service.send_telegram_invitation(
+           phone_number=technician.phone_number,
+           technician_name=technician.name,
+           telegram_link=invitation.telegram_link
+       )
+       
+       return {
+           "success": True,
+           "expires_at": invitation.expires_at,
+           "phone_number": technician.phone_number  # Masked for security
+       }
+   ```
+
+2. Create `SMSService` abstraction:
+   ```python
+   class SMSService(ABC):
+       @abstractmethod
+       async def send_telegram_invitation(
+           self, phone_number: str, technician_name: str, telegram_link: str
+       ) -> bool:
+           pass
+   ```
+
+3. Implement SMS provider (choose one):
+   - **Option A:** AWS SNS (native AWS)
+
+4. SMS message template:
+   ```
+   Hi {name}, tap this link to connect your Telegram account to Field Intake:
+   {telegram_link}
+   
+   This link expires in 1 hour.
+   ```
+
+5. Add tests:
+   - Endpoint creates invitation
+   - SMS sent to technician's phone
+   - Returns correct response
+   - Handles invalid technician_id (404)
+   - Handles technician without phone number
+   - SMS failure logged but doesn't block invitation creation
+
+**Success Criteria:**
+- Endpoint creates invitation and returns deeplink
+- SMS sent successfully
+- Error handling for invalid inputs
+- All tests pass
+
+---
+
+#### Step 4-4: Frontend UI for Telegram Connection
+
+**Goal:** Add UI for sending invitation and showing connection status.
+
+**Tasks:**
+1. Update TechnicianList component:
+   - Add "Telegram Status" column
+   - Show "Connected" (green) if `chat_id` exists
+   - Show "Not Connected" (gray) with "Send Invitation" button if no `chat_id`
+   - Show "Invitation Sent" (yellow) with timestamp if invitation pending
+
+2. Create "Send Telegram Invitation" button:
+   ```typescript
+   const handleSendInvitation = async (technicianId: string) => {
+     try {
+       await api.createTelegramInvitation(technicianId);
+       alert('Telegram invitation sent via SMS');
+       // Refresh technician list
+     } catch (error) {
+       alert('Failed to send invitation: ' + error.message);
+     }
+   };
+   ```
+
+3. Add API client method:
+   ```typescript
+   async createTelegramInvitation(technicianId: string): Promise<void> {
+     const response = await fetch(
+       `${API_BASE_URL}/api/technicians/${technicianId}/telegram-invitation`,
+       { method: 'POST' }
+     );
+     if (!response.ok) throw new Error('Failed to send invitation');
+   }
+   ```
+
+4. Update technician status display:
+   - Poll technician list every 10 seconds (or use SSE)
+   - When `chat_id` changes from null to value, show "Connected" status
+   - Show connection timestamp
+
+5. Add visual feedback:
+   - Loading state while sending invitation
+   - Success toast/alert on invitation sent
+   - Error handling for SMS failures
+
+**Success Criteria:**
+- "Send Invitation" button visible for unconnected technicians
+- Clicking button sends SMS
+- UI updates to show "Invitation Sent" status
+- When technician connects, status changes to "Connected"
+- Error messages displayed appropriately
+
+---
+
+#### Step 4-5: End-to-End Testing and Documentation
+
+**Goal:** Test complete flow and document setup process.
+
+**Tasks:**
+1. **Manual end-to-end test:**
+   - Create technician in UI with real phone number
+   - Click "Send Telegram Invitation"
+   - Receive SMS on phone
+   - Tap Telegram deeplink
+   - Start bot in Telegram
+   - Verify confirmation message received
+   - Verify UI shows "Connected" status
+   - Create assignment for that technician
+   - Verify assignment notification received in Telegram
+
+2. **Automated integration tests:**
+   ```python
+   def test_full_telegram_invitation_flow():
+       # Create technician
+       # Generate invitation
+       # Mock SMS sent
+       # Simulate webhook with /start token
+       # Verify chat_id linked
+       # Verify confirmation message sent
+       # Verify invitation marked as used
+   ```
+
+3. **Documentation updates:**
+   - Update `docs/telegram-setup.md` with BotFather configuration
+   - Document webhook registration process
+   - Document Secrets Manager setup
+   - Document SMS provider configuration
+   - Add troubleshooting guide
+
+4. **Webhook registration script:**
+   ```bash
+   #!/bin/bash
+   # scripts/register-telegram-webhook.sh
+   
+   BOT_TOKEN=$(aws secretsmanager get-secret-value \
+     --secret-id field-intake/dev/telegram-bot-token \
+     --query SecretString --output text)
+   
+   WEBHOOK_URL="https://your-api-gateway.amazonaws.com/webhook"
+   
+   curl -X POST \
+     "https://api.telegram.org/bot${BOT_TOKEN}/setWebhook" \
+     -H "Content-Type: application/json" \
+     -d "{\"url\":\"${WEBHOOK_URL}\"}"
+   ```
+
+5. **Security checklist:**
+   - ✅ Bot token in Secrets Manager (never in code)
+   - ✅ Invitation tokens hashed before storage
+   - ✅ Tokens expire after 1 hour
+   - ✅ Tokens single-use
+   - ✅ Webhook validates update_id for idempotency
+   - ✅ IAM roles follow least privilege
+   - ✅ Phone numbers masked in logs
+   - ✅ Raw tokens never logged
+
+**Success Criteria:**
+- Complete flow works end-to-end
+- All automated tests pass
+- Documentation complete and accurate
+- Security checklist verified
+- Webhook registered successfully
+
+---
+
+### Key Differences from Original Spec
+
+**Adapted for Field Intake Architecture:**
+1. **FastAPI instead of generic Lambda** - Use existing FastAPI patterns, not Lambda-specific code
+2. **Terraform instead of CDK** - Extend existing Terraform modules
+3. **UUID-based technicians** - Link invitation to `technician_id` (UUID), not arbitrary `userId`
+4. **Existing webhook endpoint** - Extend `/webhook` rather than create `/telegram/webhook`
+5. **Technician phone numbers** - Already have `phone_number` field from Step 3-2
+6. **No separate authentication** - Technicians identified by `technician_id` from invitation token
+7. **DynamoDB patterns** - Follow existing repository pattern conventions
+8. **React SPA** - Frontend already exists, just extend TechnicianList component
+
+### Migration from Manual chat_id to Automated
+
+**Current state (Step 3-2):**
+- Admin manually gets chat_id from logs
+- Admin manually enters chat_id when creating technician
+- Technician manually messages bot first
+
+**Target state (Step 4-x):**
+- Admin creates technician with phone number only
+- System sends SMS invitation automatically
+- Technician taps link and chat_id auto-links
+- No manual chat_id copying
+
+**Backward compatibility:**
+- Keep existing manual flow working
+- Add new automated flow as enhancement
+- Support both flows simultaneously
+- Existing technicians with chat_id continue working
+
+### Next Steps After Phase 4
+
+Once Telegram invitation system is complete:
+
+1. **Phase 5:** Assignment notifications via SMS (for technicians without Telegram)
+2. **Phase 6:** Bi-directional SMS support (technician responds via SMS, not just Telegram)
+3. **Phase 7:** Web-based intake form (no Telegram/SMS required)
+4. **Phase 8:** Mobile app with push notifications

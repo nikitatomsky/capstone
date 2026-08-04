@@ -1,4 +1,4 @@
-import type { Assignment, AssignmentCreate, Technician } from '../types/models';
+import type { Assignment, AssignmentCreate, Technician, TechnicianCreate } from '../types/models';
 
 const API_BASE_URL = 'http://localhost:4000';
 
@@ -26,10 +26,39 @@ export const api = {
     return response.json();
   },
 
-  // Technicians
+  // Technicians (Full CRUD)
   async getTechnicians(): Promise<Technician[]> {
     const response = await fetch(`${API_BASE_URL}/api/technicians`);
     if (!response.ok) throw new Error('Failed to fetch technicians');
     return response.json();
+  },
+
+  async getTechnician(id: string): Promise<Technician> {
+    const response = await fetch(`${API_BASE_URL}/api/technicians/${id}`);
+    if (!response.ok) throw new Error('Failed to fetch technician');
+    return response.json();
+  },
+
+  async createTechnician(data: TechnicianCreate): Promise<Technician> {
+    const response = await fetch(`${API_BASE_URL}/api/technicians`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to create technician');
+    }
+    return response.json();
+  },
+
+  async deleteTechnician(id: string): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/api/technicians/${id}`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to delete technician');
+    }
   },
 };

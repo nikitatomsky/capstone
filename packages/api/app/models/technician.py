@@ -2,8 +2,11 @@
 Technician model for technician registration and profile management.
 
 Architecture reference: docs/path-to-reactive-flow.md lines 72-77
+
+Updated for Issue #30: UUID-based technician identification with optional chat_id
 """
 
+import uuid
 from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field, field_validator
@@ -13,12 +16,14 @@ class Technician(BaseModel):
     """
     Technician model for field employee registration.
 
-    Technicians are registered with their Telegram chat_id and phone number.
-    The chat_id serves as the primary key for linking assignments and messages.
+    Issue #30: Refactored to use UUID as primary key instead of chat_id.
+    The technician_id serves as the primary key for linking assignments.
+    chat_id is now optional and only used for Telegram integration.
     """
 
-    chat_id: int = Field(
-        description="Telegram chat_id (primary key for technician identification)"
+    technician_id: str = Field(
+        default_factory=lambda: str(uuid.uuid4()),
+        description="UUID primary key for technician identification"
     )
 
     name: str = Field(
@@ -28,7 +33,12 @@ class Technician(BaseModel):
 
     phone_number: str = Field(
         min_length=1,
-        description="Phone number associated with Telegram account"
+        description="Phone number (can be actual phone or UUID placeholder)"
+    )
+
+    chat_id: int | None = Field(
+        default=None,
+        description="Optional Telegram chat_id (for Telegram integration)"
     )
 
     registered_at: datetime = Field(
@@ -58,14 +68,8 @@ class TechnicianCreate(BaseModel):
     Request model for registering a new technician.
 
     Used by the POST /api/technicians endpoint.
+    Issue #30: chat_id is now optional (only needed for Telegram integration).
     """
-
-    chat_id: int = Field(
-        description=(
-            "Telegram chat_id of the technician "
-            "(obtained by having them message the bot first)"
-        )
-    )
 
     name: str = Field(
         min_length=1,
@@ -74,5 +78,13 @@ class TechnicianCreate(BaseModel):
 
     phone_number: str = Field(
         min_length=1,
-        description="Phone number associated with their Telegram account"
+        description="Phone number (can be actual phone or UUID placeholder)"
+    )
+
+    chat_id: int | None = Field(
+        default=None,
+        description=(
+            "Optional Telegram chat_id "
+            "(only needed if technician uses Telegram integration)"
+        )
     )

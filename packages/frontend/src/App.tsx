@@ -2,6 +2,8 @@ import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
 import AssignmentList from './components/AssignmentList';
 import AssignmentDetail from './components/AssignmentDetail';
 import CreateAssignmentForm from './components/CreateAssignmentForm';
+import TechnicianList from './components/TechnicianList';
+import CreateTechnicianForm from './components/CreateTechnicianForm';
 import './App.css';
 
 function App() {
@@ -15,9 +17,12 @@ function App() {
           marginBottom: '20px'
         }}>
           <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
-            <h2 style={{ margin: 0 }}>Assignment Dashboard</h2>
+            <h2 style={{ margin: 0 }}>Field Intake Dashboard</h2>
             <Link to="/" style={{ textDecoration: 'none', color: '#007bff' }}>Assignments</Link>
             <Link to="/create" style={{ textDecoration: 'none', color: '#007bff' }}>Create Assignment</Link>
+            <span style={{ borderLeft: '1px solid #ccc', height: '20px' }}></span>
+            <Link to="/technicians" style={{ textDecoration: 'none', color: '#007bff' }}>Technicians</Link>
+            <Link to="/technicians/create" style={{ textDecoration: 'none', color: '#007bff' }}>Add Technician</Link>
           </div>
         </nav>
 
@@ -25,6 +30,8 @@ function App() {
           <Route path="/" element={<AssignmentList />} />
           <Route path="/assignments/:id" element={<AssignmentDetail />} />
           <Route path="/create" element={<CreateAssignmentForm />} />
+          <Route path="/technicians" element={<TechnicianList />} />
+          <Route path="/technicians/create" element={<CreateTechnicianForm />} />
         </Routes>
       </div>
     </BrowserRouter>

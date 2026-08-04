@@ -20,7 +20,7 @@ from app.exceptions import (  # noqa: E402
     MissingTextError,
     WebhookError,
 )
-from app.routers import assignment, health, sse, webhook  # noqa: E402
+from app.routers import assignment, health, sse, technician, webhook  # noqa: E402
 from app.services.extraction_service import ExtractionService  # noqa: E402
 from app.services.intake_helpers import (  # noqa: E402
     generate_followup_question,
@@ -122,4 +122,5 @@ assignment.init_dependencies(telegram_client)
 app.include_router(health.router)
 app.include_router(webhook.router)
 app.include_router(sse.router)  # Register BEFORE assignment router
+app.include_router(technician.router)  # Issue #30: Dedicated technician router
 app.include_router(assignment.router)

@@ -15,8 +15,8 @@ output "assignments_status_index_name" {
 }
 
 output "assignments_technician_index_name" {
-  description = "Name of the TechnicianIndex GSI on assignments table"
-  value       = "TechnicianIndex"
+  description = "Name of the TechnicianIdIndex GSI on assignments table"
+  value       = "TechnicianIdIndex"
 }
 
 # Technicians table outputs
@@ -28,6 +28,11 @@ output "technicians_table_name" {
 output "technicians_table_arn" {
   description = "ARN of the technicians DynamoDB table"
   value       = aws_dynamodb_table.technicians.arn
+}
+
+output "technicians_chat_id_index_name" {
+  description = "Name of the ChatIdIndex GSI on technicians table"
+  value       = "ChatIdIndex"
 }
 
 # Intake records table outputs

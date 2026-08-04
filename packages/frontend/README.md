@@ -122,3 +122,13 @@ The app uses Server-Sent Events (SSE) to receive real-time assignment updates fr
 - Assignment filtering and search
 - Pagination for large assignment lists
 
+
+
+# Terminal 1: Start backend API
+cd packages/api
+poetry run uvicorn app.main:app --reload --port 4000
+
+# Terminal 2: Start frontend dev server
+cd packages/frontend
+npm run dev
+# Visit http://localhost:5173

@@ -11,8 +11,7 @@ export default function CreateAssignmentForm() {
   const [error, setError] = useState<string | null>(null);
   
   const [formData, setFormData] = useState({
-    technician_chat_id: 0,
-    technician_name: '',
+    technician_id: '',
     title: '',
     description: '',
     priority: 'medium' as const,
@@ -21,17 +20,6 @@ export default function CreateAssignmentForm() {
   useEffect(() => {
     api.getTechnicians().then(setTechnicians).catch(console.error);
   }, []);
-
-  const handleTechnicianChange = (chatId: string) => {
-    const selectedTech = technicians.find(t => t.chat_id === parseInt(chatId));
-    if (selectedTech) {
-      setFormData({
-        ...formData,
-        technician_chat_id: selectedTech.chat_id,
-        technician_name: selectedTech.name,
-      });
-    }
-  };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -58,15 +46,15 @@ export default function CreateAssignmentForm() {
           <label>
             Technician:
             <select
-              value={formData.technician_chat_id}
-              onChange={(e) => handleTechnicianChange(e.target.value)}
+              value={formData.technician_id}
+              onChange={(e) => setFormData({ ...formData, technician_id: e.target.value })}
               required
               style={{ display: 'block', width: '100%', padding: '5px', marginTop: '5px' }}
             >
               <option value="">Select a technician</option>
               {technicians.map(tech => (
-                <option key={tech.chat_id} value={tech.chat_id}>
-                  {tech.name}
+                <option key={tech.technician_id} value={tech.technician_id}>
+                  {tech.name} - {tech.phone_number}
                 </option>
               ))}
             </select>
