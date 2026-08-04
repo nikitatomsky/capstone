@@ -1,24 +1,43 @@
 terraform {
-	required_version = ">= 1.5.0"
+  required_version = ">= 1.5.0"
 
-	required_providers {
-		aws = {
-			source  = "hashicorp/aws"
-			version = "~> 5.0"
-		}
-	}
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
 
-	# TODO: Configure remote state backend outside this template.
+  # TODO: Configure remote state backend outside this template.
 }
 
 provider "aws" {
-	region = var.aws_region
+  region = var.aws_region
 }
 
 # DynamoDB tables for assignment workflow
 module "dynamodb" {
-	source      = "../../modules/dynamodb"
-	environment = var.environment
+  source      = "../../modules/dynamodb"
+  environment = var.environment
+}
+
+# AWS Secrets Manager for sensitive configuration
+module "secretsmanager" {
+  source = "../../modules/secretsmanager"
+
+  project_name = var.project_name
+  environment  = var.environment
+
+  # Leave empty - will be set manually via AWS CLI
+  telegram_bot_token = ""
+}
+
+# IAM permissions for Telegram backend
+module "iam" {
+  source = "../../modules/iam"
+
+  project_name = var.project_name
+  environment  = var.environment
 }
 
 # TODO: Replace this placeholder with a call to infra/modules/serverless-api.

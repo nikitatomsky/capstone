@@ -729,3 +729,147 @@ curl http://localhost:4000/api/assignments/stream -N
   - Update Telegram webhook to API Gateway URL
 
 **Branch**: `feature/spa-backend-prep` (ready for PR to develop)
+
+---
+
+## 2026-08-04 - Step 4-0: Telegram Bot Invitation Infrastructure
+
+**Focus**: Establish AWS infrastructure foundation for secure, automated Telegram bot invitations
+
+**Accomplishments**:
+- Created DynamoDB telegram-invitations table with TTL for automatic cleanup
+  - Hash key: `token_hash` (SHA-256 hash of invitation token)
+  - GSI: `TechnicianIdIndex` for looking up invitations by technician
+  - TTL attribute: `expires_at_ttl` for automatic expiration
+  - Table name: `field-intake-telegram-invitations-${environment}`
+- Set up AWS Secrets Manager module for Telegram bot token
+  - Secret name: `field-intake/${environment}/telegram-bot-token`
+  - Configured for manual secret value setting (not in Terraform state)
+  - Prevents bot token from being committed to source control
+- Configured IAM permissions with least-privilege policy
+  - Created `field-intake-telegram-backend-${environment}` policy
+  - Grants `secretsmanager:GetSecretValue` for bot token secret
+  - Grants DynamoDB CRUD operations on telegram-invitations table
+  - Scoped to specific resources (no broad permissions)
+- Documented backend environment variables and setup
+  - Created `packages/api/README.md` with comprehensive setup instructions
+  - Updated `.env.example` with new Telegram invitation variables
+  - Documented local development vs production configuration
+  - Added IAM policy attachment instructions
+- Validated Terraform configuration
+  - `terraform init` successful with new modules
+  - `terraform fmt` applied to all files
+  - `terraform validate` passed successfully
+  - All outputs configured for new resources
+
+**Key Decisions**:
+- **Extend Existing DynamoDB Module**: Added telegram-invitations table to existing `infra/modules/dynamodb/` instead of creating separate module
+  - Maintains consistency with existing infrastructure patterns
+  - Simplifies module management
+- **Manual Secret Value Setting**: Secret value set via AWS CLI, not Terraform
+  - Prevents bot token from appearing in Terraform state
+  - Follows security best practices for sensitive credentials
+- **TTL for Automatic Cleanup**: DynamoDB TTL feature removes expired invitations automatically
+  - Reduces storage costs
+  - Eliminates need for cleanup cron jobs
+  - Default expiration: 3600 seconds (1 hour)
+- **Least-Privilege IAM**: Policy grants only necessary permissions
+  - Read-only access to specific Secrets Manager secret
+  - CRUD access only to telegram-invitations table (not all tables)
+  - Environment-scoped resource ARNs
+- **boto3 Already Installed**: Backend dependency was already present in `pyproject.toml`
+  - No additional package installation needed
+
+**Patterns Discovered**:
+- **Secrets Manager Integration Pattern**: 
+  - Terraform creates empty secret resource
+  - Secret value populated manually via AWS CLI
+  - Application reads at runtime with IAM permissions
+  - Keeps secrets out of source control and Terraform state
+- **DynamoDB TTL for Temporary Data**: 
+  - Set `expires_at_ttl` attribute to Unix timestamp
+  - DynamoDB automatically deletes items after expiration
+  - No manual cleanup logic needed
+- **IAM Policy Scoping by Environment**:
+  - Use wildcard patterns with environment suffix: `*-telegram-invitations-*`
+  - Prevents cross-environment access while allowing flexibility
+  - Example: dev policy can't access staging/prod resources
+
+**Technical Details**:
+- Files created:
+  - `infra/modules/secretsmanager/main.tf` - Secrets Manager resources
+  - `infra/modules/secretsmanager/variables.tf` - Module variables
+  - `infra/modules/secretsmanager/outputs.tf` - Secret name/ARN outputs
+  - `infra/modules/iam/main.tf` - IAM policy resources
+  - `infra/modules/iam/variables.tf` - Module variables
+  - `infra/modules/iam/outputs.tf` - Policy ARN outputs
+  - `infra/modules/iam/telegram-backend-policy.json` - IAM policy document
+  - `infra/modules/iam/README.md` - IAM setup documentation
+  - `packages/api/README.md` - Backend setup and configuration guide
+- Files modified:
+  - `infra/modules/dynamodb/main.tf` - Added telegram_invitations table
+  - `infra/modules/dynamodb/outputs.tf` - Added table outputs
+  - `infra/stacks/dev/main.tf` - Added secretsmanager and iam modules
+  - `infra/stacks/dev/outputs.tf` - Added outputs for new resources
+  - `packages/api/.env.example` - Added Telegram invitation environment variables
+- Terraform validation: All checks passed (`terraform validate` successful)
+- Branch: `feature/telegram-invitation-infra`
+
+**Environment Variables Documented**:
+- `TELEGRAM_BOT_USERNAME`: Bot username for deeplink generation
+- `TELEGRAM_BOT_TOKEN_SECRET_NAME`: Secrets Manager secret name (production)
+- `TELEGRAM_INVITATION_TTL_SECONDS`: Invitation expiration time (default: 3600)
+- `AWS_REGION`: AWS region for DynamoDB and Secrets Manager
+- `TELEGRAM_BOT_TOKEN`: Direct token for local development (existing)
+
+**Infrastructure Resources** (to be created on `terraform apply`):
+1. DynamoDB Table: `field-intake-telegram-invitations-dev`
+   - Billing mode: PAY_PER_REQUEST
+   - GSI: TechnicianIdIndex
+   - TTL: expires_at_ttl
+2. Secrets Manager Secret: `field-intake/dev/telegram-bot-token`
+   - Description: Telegram bot token for field intake service
+   - Value: To be set manually via AWS CLI
+3. IAM Policy: `field-intake-telegram-backend-dev`
+   - Permissions: Read secret, CRUD on invitations table
+   - For: Local development user (future: Lambda execution role)
+
+**Next Steps**:
+- **Immediate**: Apply Terraform changes when AWS credentials are configured
+  ```bash
+  cd infra/stacks/dev
+  terraform apply  # Create DynamoDB table, Secrets Manager secret, IAM policy
+  
+  # Set bot token in Secrets Manager
+  TOKEN=$(grep TELEGRAM_BOT_TOKEN packages/api/.env | cut -d '=' -f2)
+  aws secretsmanager put-secret-value \
+    --secret-id field-intake/dev/telegram-bot-token \
+    --secret-string "$TOKEN"
+  
+  # Attach IAM policy to user
+  aws iam attach-user-policy \
+    --user-name YOUR_IAM_USER \
+    --policy-arn $(terraform output -raw telegram_backend_policy_arn)
+  ```
+- **Step 4-1**: Implement Invitation Token Service (TDD)
+  - Create `InvitationToken` Pydantic model
+  - Implement `InvitationRepository` with DynamoDB client
+  - Add `POST /api/invitations` endpoint (admin creates invitation)
+  - Add `GET /api/invitations/validate/{token}` endpoint (bot validates)
+  - Write Pytest tests for token generation, storage, validation, expiration
+  - Manual testing: SMS with deeplink → Telegram bot validates token → links chat_id
+
+**Success Criteria Met**:
+- ✅ DynamoDB telegram-invitations table defined in Terraform with TTL
+- ✅ AWS Secrets Manager secret defined for Telegram bot token
+- ✅ IAM roles configured with least-privilege access
+- ✅ Environment variables documented for backend configuration
+- ✅ Terraform validates successfully without errors
+- ✅ Infrastructure ready for invitation token service (Step 4-1)
+- ✅ Memory updated with accomplishments and patterns
+
+**What's Next**:
+- Step 4-1: Implement invitation token service with TDD
+  - Backend logic for creating, storing, validating tokens
+  - Integration with Telegram bot for chat ID linking
+  - SMS integration for sending invitation deeplinks (stretch)

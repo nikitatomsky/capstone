@@ -96,3 +96,41 @@ resource "aws_dynamodb_table" "intake_records" {
     Project     = "field-intake-service"
   }
 }
+
+# Telegram invitations table
+# Stores temporary invitation tokens for chat ID linking
+resource "aws_dynamodb_table" "telegram_invitations" {
+  name         = "field-intake-telegram-invitations-${var.environment}"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "token_hash"
+
+  attribute {
+    name = "token_hash"
+    type = "S" # SHA-256 hash of invitation token
+  }
+
+  attribute {
+    name = "technician_id"
+    type = "S" # UUID of technician
+  }
+
+  # GSI for looking up invitations by technician
+  global_secondary_index {
+    name            = "TechnicianIdIndex"
+    hash_key        = "technician_id"
+    projection_type = "ALL"
+  }
+
+  # Enable TTL for automatic cleanup of expired invitations
+  ttl {
+    attribute_name = "expires_at_ttl"
+    enabled        = true
+  }
+
+  tags = {
+    Name        = "Telegram Invitations"
+    Environment = var.environment
+    Project     = "field-intake-service"
+    Purpose     = "Temporary invitation tokens for Telegram bot linking"
+  }
+}
