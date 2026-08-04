@@ -6,6 +6,7 @@ import os
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 
 # Load environment variables from .env file
 # Must be called before importing app modules that depend on env vars
@@ -19,7 +20,7 @@ from app.exceptions import (  # noqa: E402
     MissingTextError,
     WebhookError,
 )
-from app.routers import assignment, health, webhook  # noqa: E402
+from app.routers import assignment, health, sse, webhook  # noqa: E402
 from app.services.extraction_service import ExtractionService  # noqa: E402
 from app.services.intake_helpers import (  # noqa: E402
     generate_followup_question,
@@ -34,6 +35,21 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Field Intake Service")
+
+# CORS middleware for SPA integration
+# Allows cross-origin requests from React frontend
+# Local dev: localhost:5173 (Vite default), localhost:3000 (alternative React port)
+# Production: CloudFront domain (update when deployed)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",  # Vite dev server
+        "http://localhost:3000",  # Alternative React dev port
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Create singleton SessionService instance
 session_service = SessionService()
@@ -101,6 +117,9 @@ health.init_dependencies(session_service)
 assignment.init_dependencies(telegram_client)
 
 # Include routers
+# IMPORTANT: Register SSE router before assignment router
+# to prevent /api/assignments/stream from matching /api/assignments/{assignment_id}
 app.include_router(health.router)
 app.include_router(webhook.router)
+app.include_router(sse.router)  # Register BEFORE assignment router
 app.include_router(assignment.router)

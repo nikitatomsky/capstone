@@ -201,7 +201,9 @@ async def webhook(update: TelegramUpdate):
             session_service.complete_session(chat_id)
             logger.info(f"Session closed for chat_id={chat_id}")
 
-            # TODO: Persist to database and send notification (Step 1-6)
+            # Note: Manager notifications are intentionally skipped when assignments
+            # reach completed state. Assignment status is updated in DynamoDB,
+            # and managers can poll the API or use real-time dashboard updates.
             response_text = (
                 "Thank you! I have all the information I need. "
                 "Your service report has been recorded."

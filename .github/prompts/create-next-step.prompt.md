@@ -81,7 +81,7 @@ Based on the gathered context, determine:
 1. **What's been completed**: From memory, git history, and issue context
 2. **Current blockers or gaps**: Missing features, failing tests, quality issues
 3. **Next logical step**: The smallest coherent increment that advances the project
-4. **Workflow approach**: Which agents/prompts should execute, validate, test, and commit
+4. **Workflow approach**: Which agents/prompts should execute, validate, test
 
 **Prioritization criteria**:
 - Failing tests → Fix them first
@@ -147,7 +147,6 @@ Example:
 
 > **Continuing from Step X-Y**: [Short continuity note if this follows another step]
 
-> **Branch Reminder**: [Expected branch and commit strategy, e.g., "All work happens on feature/backend-tests branch"]
 
 ## Instructions
 
@@ -210,15 +209,7 @@ Standard validation and progression workflow:
      ```
    - If UI testing is not required, state why (e.g., "Backend-only changes")
 
-3. **Commit and push** using automation:
-   ```
-   /commit-and-push
-   ```
-   - Provide branch name when prompted (e.g., `feature/backend-tests`)
-   - AI analyzes changes and creates conventional commit message
-   - Automatically pushes to trigger next workflow
-
-4. **Update memory** (REQUIRED):
+3. **Update memory** (REQUIRED):
    - Update `.github/memory/session-notes.md` with:
      - Date and step/feature name
      - What was accomplished
@@ -236,7 +227,6 @@ To complete this step successfully:
 - ✅ [Observable criterion 2 - include actual verification command if possible]
 - ✅ [Observable criterion 3 - state expected outcome clearly]
 - ✅ [Observable criterion 4 - testing criterion if applicable]
-- ✅ Changes are committed and pushed to `[branch-name]` using `/commit-and-push`
 - ✅ Memory updated in `.github/memory/session-notes.md` with accomplishments and next steps
 
 Examples:
@@ -262,9 +252,6 @@ Examples:
 
 ---
 
-[One sentence describing what happens next or how to proceed]
-
-Example: "Wait for the automation to post Step X-Y+1 instructions below!" or "Once validated and committed, proceed to implement the next feature."
 ```
 
 ### Step 6: Quality Checklist
@@ -288,7 +275,6 @@ Before creating the GitHub Issue, verify your draft:
 **Agent Integration**:
 - ✅ Names appropriate agents or prompts for execution (`/execute-step`, `/validate-step`, etc.)
 - ✅ Specifies which agent auto-switches happen (if using prompts)
-- ✅ Includes commit/push workflow using `/commit-and-push`
 - ✅ Includes memory update instructions in "Validate and Progress" activity
 
 **Completeness**:

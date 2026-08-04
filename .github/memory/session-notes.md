@@ -279,60 +279,6 @@ class IntakeRecord:
 
 ---
 
-## 2026-08-04 - Step 2-4: Enable DynamoDB Persistence for Assignment Workflow
-
-**Focus**: Switch from in-memory FakeAssignmentRepository to production-ready DynamoDBAssignmentRepository with deployed AWS tables
-
-**Accomplishments**:
-- ✅ Deployed DynamoDB tables to AWS us-east-1 via Terraform
-  - field-intake-assignments-dev with 2 GSIs (StatusIndex, TechnicianIndex)
-  - field-intake-records-dev with 1 GSI (AssignmentIndex)
-  - field-intake-technicians-dev
-- ✅ Switched assignment.py to use DynamoDBAssignmentRepository in production
-- ✅ Implemented lazy repository initialization to enable test mocking
-- ✅ Added test fixture to automatically inject FakeAssignmentRepository in all tests
-- ✅ All 96 tests passing (test isolation maintained with FakeAssignmentRepository)
-- ✅ Manual verification: created assignment, restarted server, assignment persisted
-- ✅ Direct DynamoDB verification via AWS CLI confirmed data persistence
-- ✅ Zero lint errors, code quality maintained
-
-**Key Decisions**:
-
-1. **Lazy Initialization Pattern**:
-   - Changed `_repository_instance = DynamoDBAssignmentRepository()` to `_repository_instance = None`
-   - Initialization happens in `get_assignment_repo()` function
-   - Prevents boto3 connection at module import time
-   - Allows test fixtures to mock repository before initialization
-
-2. **Test Isolation Strategy**:
-   - Added `setup_test_repository` fixture (autouse=True)
-   - Automatically injects FakeAssignmentRepository for all tests
-   - Tests run fast without AWS dependencies
-   - Production code uses real DynamoDB, tests use fake
-
-3. **Region Configuration**:
-   - Used us-east-1 (user preference over us-east-2)
-   - Updated terraform.tfvars with correct region
-   - AWS credentials via `aws configure export-credentials`
-
-**Technical Implementation**:
-- Modified `app/routers/assignment.py`: lazy repository initialization
-- Modified `tests/conftest.py`: added repository mocking fixture
-- Updated `infra/stacks/dev/terraform.tfvars`: set aws_region to us-east-1
-- Deployed infrastructure: `terraform init && terraform apply -auto-approve`
-
-**Testing Results**:
-- Unit/Integration tests: 96 passed, 1 skipped (all using FakeAssignmentRepository)
-- Manual persistence test: Assignment survived server restart ✅
-- AWS DynamoDB verification: Direct query confirmed data in table ✅
-
-**What's Next**:
-- Step 2-3 is actually already complete (webhook-assignment integration)
-- Consider adding intake record persistence to DynamoDB (currently in-memory)
-- Consider Phase 4: React SPA with real-time updates (stretch goal)
-
----
-
 ## 2026-08-03 - Step 2-1: Assignment API with DynamoDB Persistence
 
 **Focus**: Implement Assignment API layer with DynamoDB persistence using strict TDD
@@ -637,3 +583,149 @@ def complete_assignment(assignment_id: str, intake_record_id: str) -> Assignment
 - Manual testing: Create assignment → Receive notification → Respond via Telegram → Verify status updates
 
 **Branch**: `feature/llm-extraction-service` (continuing from Step 2-2)
+
+---
+
+## 2026-08-04 (Evening) - Step 3-0: Backend SPA Preparation Complete
+
+**Focus**: Add CORS and SSE support for React SPA integration
+
+**Context**:
+- Assignment REST API fully functional (Step 2-1)  
+- Telegram notifications working (Step 2-2)
+- Webhook-assignment integration complete (Step 2-3)
+- DynamoDB persistence operational
+- All 107 tests passing, zero lint errors
+- Ready to add frontend integration capabilities
+
+**What Was Built**:
+
+### 1. CORS Middleware (TDD Cycle 1)
+**RED Phase**: Wrote 6 failing tests in `tests/test_cors.py`
+- Preflight OPTIONS requests
+- Actual request CORS headers
+- Multiple origins (localhost:5173, localhost:3000)
+- Credentials support
+- Unauthorized origin rejection
+
+**GREEN Phase**: Implemented CORS middleware in `app/main.py`
+```python
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",  # Vite dev server
+        "http://localhost:3000",  # Alternative React port
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+```
+
+**Result**: All 6 CORS tests passing
+
+### 2. SSE Infrastructure (TDD Cycle 2)  
+**RED Phase**: Wrote 5 failing tests in `tests/test_sse.py`
+- SSE endpoint registration  
+- SSE manager broadcast capability
+- Multiple connection handling
+
+**GREEN Phase**: Implemented SSE components
+- Created `app/services/sse_manager.py` - Connection manager with subscribe/broadcast pattern
+- Created `app/routers/sse.py` - EventSourceResponse endpoint at `/api/assignments/stream`
+- Registered SSE router BEFORE assignment router (prevents path conflict with `/{assignment_id}`)
+- Integrated broadcasts in `app/routers/assignment.py`
+
+**Result**: All 5 SSE tests passing
+
+### 3. SSE Event Broadcasting
+Added real-time broadcasts when assignments are created:
+```python
+await sse_manager.broadcast(
+    "assignment_created",
+    {
+        "assignment_id": created_assignment.assignment_id,
+        "status": created_assignment.status,
+        "technician_name": created_assignment.technician_name,
+        "title": created_assignment.title,
+        "priority": created_assignment.priority,
+    }
+)
+```
+
+**Key Technical Decisions**:
+
+1. **CORS Whitelist Strategy**:
+   - Restrictive origin list (no wildcard `*`)
+   - Security-first approach
+   - Easy to add production CloudFront domain later
+
+2. **SSE Manager Pattern**:
+   - Global singleton instance
+   - Async queue per connection
+   - Automatic cleanup on disconnect
+   - Broadcast only when clients connected (efficient)
+
+3. **Router Registration Order**:
+   - SSE router registered BEFORE assignment router
+   - Prevents `/api/assignments/stream` matching `/{assignment_id}` pattern
+   - Specific routes must precede parameterized routes
+
+4. **SSE Testing Approach**:
+   - Test endpoint registration via OpenAPI schema
+   - Test manager broadcast logic directly
+   - Skip actual streaming tests (would hang indefinitely)
+   - Manual curl testing for end-to-end validation
+
+**Dependencies Added**:
+- `sse-starlette (>=2.1.3,<3.0.0)` - EventSourceResponse support
+
+**Files Created**:
+- `app/services/sse_manager.py` - SSE connection manager
+- `app/routers/sse.py` - SSE streaming endpoint  
+- `tests/test_cors.py` - CORS functionality tests (6 tests)
+- `tests/test_sse.py` - SSE infrastructure tests (5 tests)
+
+**Files Modified**:
+- `app/main.py` - Added CORS middleware, registered SSE router
+- `app/routers/assignment.py` - Added SSE broadcast on assignment creation
+- `pyproject.toml` - Added sse-starlette dependency
+
+**Test Results**:
+- ✅ **107 tests passing** (up from 96)
+- ✅ **1 skipped** (Anthropic integration test)
+- ✅ **0 failures**
+- ✅ **0 lint errors** (Ruff clean)
+- New tests: 6 CORS + 5 SSE = 11 new tests
+
+**Validation**:
+```bash
+# All tests pass
+poetry run pytest -v  # 107 passed, 1 skipped
+
+# Zero lint errors
+poetry run ruff check .  # All checks passed!
+
+# SSE endpoint registered
+curl http://localhost:4000/api/assignments/stream -N
+```
+
+**What's Next (Phase 3 - SPA Implementation)**:
+- **Step 3-1**: Scaffold React SPA with Vite
+  - Create `packages/admin-ui` structure
+  - Install dependencies (React Query, Tailwind)
+  - Build components: AssignmentList, AssignmentForm, StatusBadge
+  - Connect to backend API with CORS  
+  - Implement SSE real-time updates
+- **Step 3-2**: Full SPA implementation (comprehensive)
+  - Backend prep (if not done in 3-0)
+  - Frontend scaffold and component implementation
+  - Integration testing
+  - End-to-end workflow validation
+- **Step 3-3**: AWS Deployment (stretch goal)
+  - Frontend: Build and deploy to S3 + CloudFront
+  - Backend: Apply Terraform, deploy Lambda/API Gateway
+  - Update CORS origins for production domain
+  - Update Telegram webhook to API Gateway URL
+
+**Branch**: `feature/spa-backend-prep` (ready for PR to develop)

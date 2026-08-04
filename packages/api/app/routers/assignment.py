@@ -19,6 +19,7 @@ from app.repositories.assignment_repository import (
     AssignmentRepository,
     DynamoDBAssignmentRepository,
 )
+from app.services.sse_manager import sse_manager
 
 router = APIRouter(tags=["assignments"])
 logger = logging.getLogger(__name__)
@@ -98,6 +99,18 @@ async def create_assignment(
             # Don't fail the request if notification fails
     else:
         logger.warning("Telegram client not available - notification not sent")
+
+    # Broadcast assignment creation event via SSE (Step 3-0)
+    await sse_manager.broadcast(
+        "assignment_created",
+        {
+            "assignment_id": created_assignment.assignment_id,
+            "status": created_assignment.status,
+            "technician_name": created_assignment.technician_name,
+            "title": created_assignment.title,
+            "priority": created_assignment.priority,
+        }
+    )
 
     return created_assignment
 
