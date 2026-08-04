@@ -10,6 +10,7 @@ Provides endpoints for managing assignments and technicians:
 """
 
 import logging
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -17,7 +18,7 @@ from app.models.assignment import Assignment, AssignmentCreate
 from app.models.technician import Technician, TechnicianCreate
 from app.repositories.assignment_repository import (
     AssignmentRepository,
-    DynamoDBAssignmentRepository,
+    FakeAssignmentRepository,
 )
 from app.services.sse_manager import sse_manager
 
@@ -25,8 +26,8 @@ router = APIRouter(tags=["assignments"])
 logger = logging.getLogger(__name__)
 
 # Dependency injection for repository
-# Using DynamoDB for production-ready persistence
-# Tests continue to use FakeAssignmentRepository for isolation
+# Using in-memory repository for local development
+# Production should use DynamoDBAssignmentRepository
 _repository_instance: AssignmentRepository | None = None
 
 # Telegram client for sending notifications
@@ -43,7 +44,73 @@ def get_assignment_repo() -> AssignmentRepository:
     """Dependency that provides assignment repository."""
     global _repository_instance
     if _repository_instance is None:
-        _repository_instance = DynamoDBAssignmentRepository()
+        # Use in-memory repository for local development
+        repo = FakeAssignmentRepository()
+
+        # Add sample technicians for testing
+        sample_tech_1 = Technician(
+            chat_id=123456789,
+            name="John Smith",
+            phone_number="+1234567890",
+            registered_at=datetime.now(UTC)
+        )
+        sample_tech_2 = Technician(
+            chat_id=987654321,
+            name="Jane Doe",
+            phone_number="+1987654321",
+            registered_at=datetime.now(UTC)
+        )
+        repo.create_technician(sample_tech_1)
+        repo.create_technician(sample_tech_2)
+
+        # Add sample assignments for testing
+        sample_assignment_1 = Assignment(
+            assignment_id="assign-001",
+            technician_chat_id=123456789,
+            technician_name="John Smith",
+            title="HVAC Repair at Downtown Office",
+            description=(
+                "Air conditioning unit not cooling properly. "
+                "Check refrigerant levels and filters."
+            ),
+            priority="high",
+            status="assigned",
+            created_at=datetime.now(UTC),
+            assigned_at=datetime.now(UTC),
+            completed_at=None,
+            intake_record_id=None
+        )
+        sample_assignment_2 = Assignment(
+            assignment_id="assign-002",
+            technician_chat_id=987654321,
+            technician_name="Jane Doe",
+            title="Plumbing Inspection - Warehouse",
+            description="Routine inspection of plumbing systems in warehouse facility.",
+            priority="medium",
+            status="in_progress",
+            created_at=datetime.now(UTC),
+            assigned_at=datetime.now(UTC),
+            completed_at=None,
+            intake_record_id=None
+        )
+        sample_assignment_3 = Assignment(
+            assignment_id="assign-003",
+            technician_chat_id=123456789,
+            technician_name="John Smith",
+            title="Emergency Generator Maintenance",
+            description="Quarterly maintenance and testing of backup generator.",
+            priority="urgent",
+            status="pending",
+            created_at=datetime.now(UTC),
+            assigned_at=None,
+            completed_at=None,
+            intake_record_id=None
+        )
+        repo.create_assignment(sample_assignment_1)
+        repo.create_assignment(sample_assignment_2)
+        repo.create_assignment(sample_assignment_3)
+
+        _repository_instance = repo
     return _repository_instance
 
 
