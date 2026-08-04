@@ -5,6 +5,7 @@ Provides an abstract repository interface and a DynamoDB implementation.
 Includes a fake in-memory implementation for testing.
 """
 
+import logging
 import os
 from abc import ABC, abstractmethod
 from datetime import datetime
@@ -15,6 +16,8 @@ from botocore.exceptions import ClientError
 
 from app.models.assignment import Assignment
 from app.models.technician import Technician
+
+logger = logging.getLogger(__name__)
 
 
 class AssignmentRepository(ABC):
@@ -296,7 +299,7 @@ class DynamoDBAssignmentRepository(AssignmentRepository):
         """Convert DynamoDB item to Assignment model."""
         return Assignment(
             assignment_id=item["assignment_id"],
-            technician_chat_id=int(item["technician_chat_id"]),
+            technician_id=item["technician_id"],
             technician_name=item["technician_name"],
             title=item["title"],
             description=item["description"],
@@ -354,7 +357,7 @@ class FakeAssignmentRepository(AssignmentRepository):
         # Create a new assignment with updated status
         updated = Assignment(
             assignment_id=assignment.assignment_id,
-            technician_chat_id=assignment.technician_chat_id,
+            technician_id=assignment.technician_id,
             technician_name=assignment.technician_name,
             title=assignment.title,
             description=assignment.description,
@@ -379,7 +382,7 @@ class FakeAssignmentRepository(AssignmentRepository):
         # Create updated assignment with completed status and intake link
         updated = Assignment(
             assignment_id=assignment.assignment_id,
-            technician_chat_id=assignment.technician_chat_id,
+            technician_id=assignment.technician_id,
             technician_name=assignment.technician_name,
             title=assignment.title,
             description=assignment.description,
@@ -394,18 +397,30 @@ class FakeAssignmentRepository(AssignmentRepository):
         return updated
 
     def get_active_assignment_for_technician(self, chat_id: int) -> Assignment | None:
-        """Get the most recent active assignment for a technician."""
+        """Get the most recent active assignment for a technician (legacy method using chat_id)."""
+        # Note (Issue #30): This method is deprecated in favor of
+        # get_active_assignment_by_technician_id
+        # Kept for backward compatibility only
+        logger.warning(
+            f"get_active_assignment_for_technician called with chat_id={chat_id} - "
+            f"this method is deprecated, use get_active_assignment_by_technician_id instead"
+        )
+        return None
+
+    def get_active_assignment_by_technician_id(self, technician_id: str) -> Assignment | None:
+        """Get the most recent active assignment for a technician by their technician_id."""
+        active_statuses = ["pending", "assigned", "in_progress"]
+
         # Find all active assignments for this technician
-        active_statuses = {"pending", "assigned", "in_progress"}
         active_assignments = [
-            a for a in self._assignments.values()
-            if a.technician_chat_id == chat_id and a.status in active_statuses
+            assignment for assignment in self._assignments.values()
+            if assignment.technician_id == technician_id and assignment.status in active_statuses
         ]
 
         if not active_assignments:
             return None
 
-        # Return the most recently created one
+        # Return the most recent one (by created_at timestamp)
         return max(active_assignments, key=lambda a: a.created_at)
 
     def create_technician(self, technician: Technician) -> Technician:

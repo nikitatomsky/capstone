@@ -15,6 +15,7 @@ session_service = None
 extraction_service = None
 telegram_client = None
 assignment_repository = None
+technician_repository = None
 
 # Helper functions - will be injected from main.py
 _truncate_for_log = None
@@ -30,19 +31,22 @@ def init_dependencies(
     get_missing_fn,
     generate_followup_fn,
     assignment_repo=None,
+    technician_repo=None,
 ):
     """
     Initialize router dependencies.
 
     This is called from main.py to inject services and helper functions.
     """
-    global session_service, extraction_service, telegram_client, assignment_repository
+    global session_service, extraction_service, telegram_client
+    global assignment_repository, technician_repository
     global _truncate_for_log, get_missing_fields, generate_followup_question
 
     session_service = session_svc
     extraction_service = extraction_svc
     telegram_client = telegram_cl
     assignment_repository = assignment_repo
+    technician_repository = technician_repo
     _truncate_for_log = truncate_fn
     get_missing_fields = get_missing_fn
     generate_followup_question = generate_followup_fn
@@ -56,12 +60,29 @@ def _link_session_to_assignment(chat_id: int, session: dict) -> None:
         chat_id: Telegram chat ID
         session: Session dictionary containing intake record
     """
-    if not assignment_repository or session["intake_record"].assignment_id:
+    logger.debug(
+        f"_link_session_to_assignment called: assignment_repo={assignment_repository is not None}, "
+        f"technician_repo={technician_repository is not None}, "
+        f"assignment_id={session['intake_record'].assignment_id}"
+    )
+    if (not assignment_repository or not technician_repository
+            or session["intake_record"].assignment_id):
+        logger.debug("Early return from _link_session_to_assignment")
         return
 
+    # Look up technician by chat_id to get technician_id
+    technician = technician_repository.get_technician_by_chat_id(chat_id)
+    logger.debug(f"Looked up technician for chat_id={chat_id}: {technician}")
+    if not technician:
+        logger.debug(f"No technician found for chat_id={chat_id}")
+        return
+
+    # Find active assignment for this technician
+    logger.debug(f"Looking up active assignment for technician_id={technician.technician_id}")
     active_assignment = (
-        assignment_repository.get_active_assignment_for_technician(chat_id)
+        assignment_repository.get_active_assignment_by_technician_id(technician.technician_id)
     )
+    logger.debug(f"Active assignment found: {active_assignment}")
     if not active_assignment:
         return
 

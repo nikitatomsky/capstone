@@ -7,12 +7,23 @@ Test what the Assignment API should do:
 - GET /api/assignments?status=pending filters by status (200)
 - GET /api/assignments/{id} retrieves specific assignment (200)
 - GET /api/assignments/{id} returns 404 for non-existent assignment
-- POST /api/technicians registers technician (201)
-- GET /api/technicians lists all technicians (200)
-- Validate request bodies and return 422 for invalid data
+
+Note (Issue #30): Tests updated to use technician_id (UUID) instead of chat_id.
+Technician endpoints moved to /api/technicians router.
 """
 
 from fastapi.testclient import TestClient
+
+
+def create_test_technician(client):
+    """Helper to create a technician and return the technician_id (Issue #30)."""
+    response = client.post("/api/technicians", json={
+        "name": "Test Technician",
+        "phone_number": "+1234567890",
+        "chat_id": 12345678
+    })
+    assert response.status_code == 201
+    return response.json()["technician_id"]
 
 
 def test_post_assignment_returns_201():
@@ -21,9 +32,11 @@ def test_post_assignment_returns_201():
 
     client = TestClient(app)
 
+    # Create technician first (Issue #30)
+    technician_id = create_test_technician(client)
+
     assignment_data = {
-        "technician_chat_id": 12345678,
-        "technician_name": "John Smith",
+        "technician_id": technician_id,
         "title": "HVAC Repair - Building 5",
         "description": "Check heating system in Building 5, Room 203",
         "priority": "high"
@@ -33,7 +46,7 @@ def test_post_assignment_returns_201():
 
     assert response.status_code == 201
     data = response.json()
-    assert data["technician_chat_id"] == 12345678
+    assert data["technician_id"] == technician_id
     assert data["title"] == "HVAC Repair - Building 5"
     assert data["status"] == "pending"  # Default status
     assert "assignment_id" in data
@@ -64,9 +77,11 @@ def test_post_assignment_validates_priority_enum():
 
     client = TestClient(app)
 
+    # Create technician first (Issue #30)
+    technician_id = create_test_technician(client)
+
     invalid_data = {
-        "technician_chat_id": 12345678,
-        "technician_name": "John Smith",
+        "technician_id": technician_id,
         "title": "Test Assignment",
         "description": "Test description",
         "priority": "invalid_priority"  # Invalid enum value
@@ -97,10 +112,10 @@ def test_get_assignments_returns_list():
 
     client = TestClient(app)
 
-    # Create an assignment first
+    # Create technician and assignment first (Issue #30)
+    technician_id = create_test_technician(client)
     assignment_data = {
-        "technician_chat_id": 12345678,
-        "technician_name": "John Smith",
+        "technician_id": technician_id,
         "title": "Test Assignment",
         "description": "Test description",
         "priority": "low"
@@ -123,10 +138,10 @@ def test_get_assignments_filtered_by_status():
 
     client = TestClient(app)
 
-    # Create assignments with different statuses
+    # Create technician and assignment (Issue #30)
+    technician_id = create_test_technician(client)
     pending_assignment = {
-        "technician_chat_id": 12345678,
-        "technician_name": "John Smith",
+        "technician_id": technician_id,
         "title": "Pending Assignment",
         "description": "Test",
         "priority": "high"
@@ -151,10 +166,10 @@ def test_get_assignment_by_id_returns_200():
 
     client = TestClient(app)
 
-    # Create an assignment
+    # Create technician and assignment (Issue #30)
+    technician_id = create_test_technician(client)
     assignment_data = {
-        "technician_chat_id": 12345678,
-        "technician_name": "John Smith",
+        "technician_id": technician_id,
         "title": "Test Assignment",
         "description": "Test description",
         "priority": "medium"
@@ -185,52 +200,6 @@ def test_get_nonexistent_assignment_returns_404():
     assert "detail" in data
 
 
-def test_post_technician_returns_201():
-    """Test POST /api/technicians registers technician."""
-    from app.main import app
+# NOTE (Issue #30): Technician endpoint tests moved to test_technician_api.py
+# since technicians now have their own dedicated router
 
-    client = TestClient(app)
-
-    technician_data = {
-        "chat_id": 12345678,
-        "name": "John Smith",
-        "phone_number": "+1-555-0123"
-    }
-
-    response = client.post("/api/technicians", json=technician_data)
-
-    assert response.status_code == 201
-    data = response.json()
-    assert data["chat_id"] == 12345678
-    assert data["name"] == "John Smith"
-    assert data["phone_number"] == "+1-555-0123"
-    assert "registered_at" in data
-
-
-def test_post_technician_validates_required_fields():
-    """Test POST /api/technicians validates required fields."""
-    from app.main import app
-
-    client = TestClient(app)
-
-    incomplete_data = {
-        "chat_id": 12345678
-        # Missing name and phone_number
-    }
-
-    response = client.post("/api/technicians", json=incomplete_data)
-
-    assert response.status_code == 400  # Bad Request (custom handler)
-
-
-def test_get_technicians_returns_list():
-    """Test GET /api/technicians returns list of technicians."""
-    from app.main import app
-
-    client = TestClient(app)
-
-    response = client.get("/api/technicians")
-
-    assert response.status_code == 200
-    data = response.json()
-    assert isinstance(data, list)

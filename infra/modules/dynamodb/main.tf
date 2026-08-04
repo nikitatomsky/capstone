@@ -18,8 +18,8 @@ resource "aws_dynamodb_table" "assignments" {
   }
 
   attribute {
-    name = "technician_chat_id"
-    type = "N" # Number
+    name = "technician_id"
+    type = "S" # String (UUID)
   }
 
   global_secondary_index {
@@ -29,8 +29,8 @@ resource "aws_dynamodb_table" "assignments" {
   }
 
   global_secondary_index {
-    name            = "TechnicianIndex"
-    hash_key        = "technician_chat_id"
+    name            = "TechnicianIdIndex"
+    hash_key        = "technician_id"
     projection_type = "ALL"
   }
 
@@ -44,11 +44,23 @@ resource "aws_dynamodb_table" "assignments" {
 resource "aws_dynamodb_table" "technicians" {
   name         = "field-intake-technicians-${var.environment}"
   billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "chat_id"
+  hash_key     = "technician_id"
+
+  attribute {
+    name = "technician_id"
+    type = "S" # UUID primary key
+  }
 
   attribute {
     name = "chat_id"
-    type = "N" # Telegram chat_id
+    type = "N" # Telegram chat_id (optional, for backward compatibility)
+  }
+
+  # GSI for looking up technicians by Telegram chat_id
+  global_secondary_index {
+    name            = "ChatIdIndex"
+    hash_key        = "chat_id"
+    projection_type = "ALL"
   }
 
   tags = {

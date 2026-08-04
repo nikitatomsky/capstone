@@ -1,12 +1,13 @@
 """
 Assignment REST API router.
 
-Provides endpoints for managing assignments and technicians:
+Provides endpoints for managing assignments:
 - POST /api/assignments - Create new assignment
 - GET /api/assignments - List all assignments (with optional status filter)
 - GET /api/assignments/{id} - Get assignment by ID
-- POST /api/technicians - Register new technician
-- GET /api/technicians - List all technicians
+
+Note (Issue #30): Technician endpoints moved to dedicated technician router
+(see app.routers.technician)
 """
 
 import logging
@@ -15,7 +16,6 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.models.assignment import Assignment, AssignmentCreate
-from app.models.technician import Technician, TechnicianCreate
 from app.repositories.assignment_repository import (
     AssignmentRepository,
     FakeAssignmentRepository,
@@ -47,26 +47,27 @@ def get_assignment_repo() -> AssignmentRepository:
         # Use in-memory repository for local development
         repo = FakeAssignmentRepository()
 
-        # Add sample technicians for testing
-        sample_tech_1 = Technician(
-            chat_id=123456789,
+        # Add sample technicians for testing (Issue #30: using new model with UUID)
+        from app.models.technician import TechnicianCreate
+        from app.routers.technician import get_technician_repo
+
+        tech_repo = get_technician_repo()
+
+        sample_tech_1 = tech_repo.create_technician(TechnicianCreate(
             name="John Smith",
             phone_number="+1234567890",
-            registered_at=datetime.now(UTC)
-        )
-        sample_tech_2 = Technician(
-            chat_id=987654321,
+            chat_id=123456789
+        ))
+        sample_tech_2 = tech_repo.create_technician(TechnicianCreate(
             name="Jane Doe",
             phone_number="+1987654321",
-            registered_at=datetime.now(UTC)
-        )
-        repo.create_technician(sample_tech_1)
-        repo.create_technician(sample_tech_2)
+            chat_id=987654321
+        ))
 
-        # Add sample assignments for testing
+        # Add sample assignments for testing (Issue #30: using technician_id)
         sample_assignment_1 = Assignment(
             assignment_id="assign-001",
-            technician_chat_id=123456789,
+            technician_id=sample_tech_1.technician_id,
             technician_name="John Smith",
             title="HVAC Repair at Downtown Office",
             description=(
@@ -82,7 +83,7 @@ def get_assignment_repo() -> AssignmentRepository:
         )
         sample_assignment_2 = Assignment(
             assignment_id="assign-002",
-            technician_chat_id=987654321,
+            technician_id=sample_tech_2.technician_id,
             technician_name="Jane Doe",
             title="Plumbing Inspection - Warehouse",
             description="Routine inspection of plumbing systems in warehouse facility.",
@@ -95,7 +96,7 @@ def get_assignment_repo() -> AssignmentRepository:
         )
         sample_assignment_3 = Assignment(
             assignment_id="assign-003",
-            technician_chat_id=123456789,
+            technician_id=sample_tech_1.technician_id,
             technician_name="John Smith",
             title="Emergency Generator Maintenance",
             description="Quarterly maintenance and testing of backup generator.",
@@ -114,25 +115,46 @@ def get_assignment_repo() -> AssignmentRepository:
     return _repository_instance
 
 
+def get_technician_repo():
+    """Dependency that provides technician repository."""
+    from app.routers.technician import get_technician_repo as get_tech_repo
+    return get_tech_repo()
+
+
 @router.post("/api/assignments", status_code=status.HTTP_201_CREATED, response_model=Assignment)
 async def create_assignment(
     assignment_data: AssignmentCreate,
-    repo: AssignmentRepository = Depends(get_assignment_repo)
+    repo: AssignmentRepository = Depends(get_assignment_repo),
+    tech_repo = Depends(get_technician_repo)
 ) -> Assignment:
     """
     Create a new assignment and notify the technician via Telegram.
 
     Args:
-        assignment_data: Assignment creation data (technician, title, description, priority)
+        assignment_data: Assignment creation data (technician_id, title, description, priority)
         repo: Assignment repository (injected)
+        tech_repo: Technician repository (injected) - for looking up technician details
 
     Returns:
         Created assignment with generated assignment_id and timestamps
+
+    Note (Issue #30):
+        - Uses technician_id (UUID) to identify the technician
+        - Looks up technician name and chat_id from TechnicianRepository
+        - Sends Telegram notification if technician has chat_id configured
     """
+    # Look up technician to get name and chat_id
+    technician = tech_repo.get_technician(assignment_data.technician_id)
+    if not technician:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Technician {assignment_data.technician_id} not found"
+        )
+
     # Convert create model to full Assignment model
     assignment = Assignment(
-        technician_chat_id=assignment_data.technician_chat_id,
-        technician_name=assignment_data.technician_name,
+        technician_id=assignment_data.technician_id,
+        technician_name=technician.name,
         title=assignment_data.title,
         description=assignment_data.description,
         priority=assignment_data.priority
@@ -140,8 +162,8 @@ async def create_assignment(
 
     created_assignment = repo.create_assignment(assignment)
 
-    # Send Telegram notification to technician (Step 2-2)
-    if telegram_client:
+    # Send Telegram notification to technician (Step 2-2) - only if they have chat_id configured
+    if telegram_client and technician.chat_id:
         notification_message = (
             f"🔔 **New Assignment**\n\n"
             f"**Title**: {created_assignment.title}\n"
@@ -151,11 +173,11 @@ async def create_assignment(
         )
         try:
             await telegram_client.send_message(
-                created_assignment.technician_chat_id,
+                technician.chat_id,
                 notification_message
             )
             logger.info(
-                f"Sent assignment notification to chat_id={created_assignment.technician_chat_id} "
+                f"Sent assignment notification to chat_id={technician.chat_id} "
                 f"for assignment_id={created_assignment.assignment_id}"
             )
         except Exception as e:
@@ -164,6 +186,11 @@ async def create_assignment(
                 f"{created_assignment.assignment_id}: {e}"
             )
             # Don't fail the request if notification fails
+    elif not technician.chat_id:
+        logger.info(
+            f"Technician {technician.technician_id} has no chat_id configured - "
+            f"skipping Telegram notification"
+        )
     else:
         logger.warning("Telegram client not available - notification not sent")
 
@@ -230,48 +257,7 @@ async def get_assignment(
     return assignment
 
 
-@router.post("/api/technicians", status_code=status.HTTP_201_CREATED, response_model=Technician)
-async def register_technician(
-    technician_data: TechnicianCreate,
-    repo: AssignmentRepository = Depends(get_assignment_repo)
-) -> Technician:
-    """
-    Register a new technician.
-
-    Args:
-        technician_data: Technician registration data (chat_id, name, phone_number)
-        repo: Assignment repository (injected)
-
-    Returns:
-        Registered technician with generated registered_at timestamp
-
-    Note:
-        To get the technician's chat_id, have them message the bot first.
-        The phone_number should match their Telegram account for verification.
-    """
-    # Convert create model to full Technician model
-    technician = Technician(
-        chat_id=technician_data.chat_id,
-        name=technician_data.name,
-        phone_number=technician_data.phone_number
-    )
-
-    created_technician = repo.create_technician(technician)
-    return created_technician
-
-
-@router.get("/api/technicians", response_model=list[Technician])
-async def list_technicians(
-    repo: AssignmentRepository = Depends(get_assignment_repo)
-) -> list[Technician]:
-    """
-    List all registered technicians.
-
-    Args:
-        repo: Assignment repository (injected)
-
-    Returns:
-        List of all registered technicians
-    """
-    technicians = repo.list_technicians()
-    return technicians
+# NOTE (Issue #30): Technician endpoints moved to dedicated technician router
+# Old endpoints removed:
+# - POST /api/technicians (now in app.routers.technician)
+# - GET /api/technicians (now in app.routers.technician)

@@ -50,6 +50,33 @@ def setup_test_repository(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def setup_technician_test_repository(monkeypatch):
+    """
+    Automatically mock technician repository for all tests (Issue #30).
+
+    This prevents tests from connecting to AWS DynamoDB
+    and provides fast in-memory storage for test isolation.
+    Links to assignment repository for testing deletion constraints.
+    """
+    import app.routers.assignment
+    import app.routers.technician
+    from app.repositories.technician_repository import FakeTechnicianRepository
+
+    # Use in-memory fake repository for all tests
+    fake_repo = FakeTechnicianRepository()
+
+    # Link to assignment repository's assignments dict for constraint checking
+    # This allows the technician repo to see assignments when checking if deletion is allowed
+    if hasattr(app.routers.assignment, "_repository_instance"):
+        assignment_repo = app.routers.assignment._repository_instance
+        if assignment_repo and hasattr(assignment_repo, "_assignments"):
+            # Share the same assignments dictionary
+            fake_repo.assignments = assignment_repo._assignments
+
+    monkeypatch.setattr(app.routers.technician, "_technician_repository", fake_repo)
+
+
+@pytest.fixture(autouse=True)
 def setup_webhook_mocks(monkeypatch):
     """
     Automatically mock webhook dependencies for all tests.

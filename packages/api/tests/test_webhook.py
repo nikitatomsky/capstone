@@ -498,28 +498,41 @@ def test_webhook_handles_various_message_types(client):
 def test_webhook_links_session_to_active_assignment(client, monkeypatch):
     """Test that webhook finds and links technician's session to their active assignment."""
     from app.models.assignment import Assignment
+    from app.models.technician import Technician
     from app.repositories.assignment_repository import FakeAssignmentRepository
+    from app.repositories.technician_repository import FakeTechnicianRepository
     from app.services.session_service import SessionService
 
-    # Create repository and session service
-    repo = FakeAssignmentRepository()
+    # Create repositories and session service
+    assignment_repo = FakeAssignmentRepository()
+    technician_repo = FakeTechnicianRepository()
     session_service = SessionService()
 
-    # Create an active assignment for a technician
+    # Create technician with specific ID (bypass create method for test setup)
+    technician = Technician(
+        technician_id="tech-webhook-111",
+        name="John Technician",
+        phone_number="555-0111",
+        chat_id=12345
+    )
+    technician_repo.technicians[technician.technician_id] = technician
+
+    # Create an active assignment for this technician
     assignment = Assignment(
-        technician_chat_id=12345,
+        technician_id="tech-webhook-111",
         technician_name="John Technician",
         title="Fix HVAC at Building A",
         description="Check and repair HVAC system",
         priority="high",
         status="assigned"
     )
-    repo.create_assignment(assignment)
+    assignment_repo.create_assignment(assignment)
 
     # Inject dependencies
     import app.routers.webhook
     monkeypatch.setattr(app.routers.webhook, "session_service", session_service)
-    monkeypatch.setattr(app.routers.webhook, "assignment_repository", repo)
+    monkeypatch.setattr(app.routers.webhook, "assignment_repository", assignment_repo)
+    monkeypatch.setattr(app.routers.webhook, "technician_repository", technician_repo)
 
     # Technician sends a message
     payload = get_sample_telegram_update("Starting work on HVAC", chat_id=12345)
@@ -536,27 +549,40 @@ def test_webhook_links_session_to_active_assignment(client, monkeypatch):
 def test_webhook_updates_assignment_status_to_in_progress(client, monkeypatch):
     """Test that webhook updates assignment status to 'in_progress' when technician responds."""
     from app.models.assignment import Assignment
+    from app.models.technician import Technician
     from app.repositories.assignment_repository import FakeAssignmentRepository
+    from app.repositories.technician_repository import FakeTechnicianRepository
     from app.services.session_service import SessionService
 
-    repo = FakeAssignmentRepository()
+    assignment_repo = FakeAssignmentRepository()
+    technician_repo = FakeTechnicianRepository()
     session_service = SessionService()
+
+    # Create technician with specific ID (bypass create method for test setup)
+    technician = Technician(
+        technician_id="tech-webhook-222",
+        name="Jane Worker",
+        phone_number="555-0222",
+        chat_id=67890
+    )
+    technician_repo.technicians[technician.technician_id] = technician
 
     # Create assignment in "assigned" status
     assignment = Assignment(
-        technician_chat_id=67890,
+        technician_id="tech-webhook-222",
         technician_name="Jane Worker",
         title="Plumbing repair",
         description="Fix leaking pipe",
         priority="urgent",
         status="assigned"  # Initial status
     )
-    created = repo.create_assignment(assignment)
+    created = assignment_repo.create_assignment(assignment)
 
     # Inject dependencies
     import app.routers.webhook
     monkeypatch.setattr(app.routers.webhook, "session_service", session_service)
-    monkeypatch.setattr(app.routers.webhook, "assignment_repository", repo)
+    monkeypatch.setattr(app.routers.webhook, "assignment_repository", assignment_repo)
+    monkeypatch.setattr(app.routers.webhook, "technician_repository", technician_repo)
 
     # Technician responds (first message)
     payload = get_sample_telegram_update("I'm at the site now", chat_id=67890)
@@ -565,7 +591,7 @@ def test_webhook_updates_assignment_status_to_in_progress(client, monkeypatch):
     assert response.status_code == 200
 
     # Assignment status should be updated to "in_progress"
-    updated_assignment = repo.get_assignment(created.assignment_id)
+    updated_assignment = assignment_repo.get_assignment(created.assignment_id)
     assert updated_assignment is not None
     assert updated_assignment.status == "in_progress"
 
@@ -573,22 +599,34 @@ def test_webhook_updates_assignment_status_to_in_progress(client, monkeypatch):
 def test_webhook_links_completed_intake_to_assignment(client, monkeypatch):
     """Test that webhook updates assignment with intake_record_id when intake is complete."""
     from app.models.assignment import Assignment
+    from app.models.technician import Technician
     from app.repositories.assignment_repository import FakeAssignmentRepository
+    from app.repositories.technician_repository import FakeTechnicianRepository
     from app.services.session_service import SessionService
 
-    repo = FakeAssignmentRepository()
+    assignment_repo = FakeAssignmentRepository()
+    technician_repo = FakeTechnicianRepository()
     session_service = SessionService()
+
+    # Create technician with specific ID (bypass create method for test setup)
+    technician = Technician(
+        technician_id="tech-webhook-333",
+        name="Bob Technician",
+        phone_number="555-0333",
+        chat_id=11111
+    )
+    technician_repo.technicians[technician.technician_id] = technician
 
     # Create assignment
     assignment = Assignment(
-        technician_chat_id=11111,
+        technician_id="tech-webhook-333",
         technician_name="Bob Technician",
         title="Electrical work",
         description="Install new outlets",
         priority="medium",
         status="in_progress"
     )
-    created = repo.create_assignment(assignment)
+    created = assignment_repo.create_assignment(assignment)
 
     # Mock extraction that provides all required fields
     class MockExtraction:
@@ -609,7 +647,8 @@ def test_webhook_links_completed_intake_to_assignment(client, monkeypatch):
     # Inject dependencies
     import app.routers.webhook
     monkeypatch.setattr(app.routers.webhook, "session_service", session_service)
-    monkeypatch.setattr(app.routers.webhook, "assignment_repository", repo)
+    monkeypatch.setattr(app.routers.webhook, "assignment_repository", assignment_repo)
+    monkeypatch.setattr(app.routers.webhook, "technician_repository", technician_repo)
     monkeypatch.setattr(app.routers.webhook, "extraction_service", extraction_service)
     monkeypatch.setattr(app.routers.webhook, "telegram_client", telegram_client)
 
@@ -623,7 +662,7 @@ def test_webhook_links_completed_intake_to_assignment(client, monkeypatch):
     assert response.status_code == 200
 
     # Assignment should be updated with intake_record_id and status "completed"
-    updated_assignment = repo.get_assignment(created.assignment_id)
+    updated_assignment = assignment_repo.get_assignment(created.assignment_id)
     assert updated_assignment is not None
     assert updated_assignment.status == "completed"
     assert updated_assignment.intake_record_id is not None
@@ -661,40 +700,53 @@ def test_webhook_handles_multiple_assignments_correctly(client, monkeypatch):
     import time
 
     from app.models.assignment import Assignment
+    from app.models.technician import Technician
     from app.repositories.assignment_repository import FakeAssignmentRepository
+    from app.repositories.technician_repository import FakeTechnicianRepository
     from app.services.session_service import SessionService
 
-    repo = FakeAssignmentRepository()
+    assignment_repo = FakeAssignmentRepository()
+    technician_repo = FakeTechnicianRepository()
     session_service = SessionService()
+
+    # Create technician with specific ID (bypass create method for test setup)
+    technician = Technician(
+        technician_id="tech-webhook-444",
+        name="Multi Worker",
+        phone_number="555-0444",
+        chat_id=33333
+    )
+    technician_repo.technicians[technician.technician_id] = technician
 
     # Create two assignments for the same technician
     assignment1 = Assignment(
-        technician_chat_id=33333,
+        technician_id="tech-webhook-444",
         technician_name="Multi Worker",
         title="Old task",
         description="Older assignment",
         priority="low",
         status="assigned"
     )
-    repo.create_assignment(assignment1)
+    assignment_repo.create_assignment(assignment1)
 
     # Small delay to ensure different timestamps
     time.sleep(0.01)
 
     assignment2 = Assignment(
-        technician_chat_id=33333,
+        technician_id="tech-webhook-444",
         technician_name="Multi Worker",
         title="New task",
         description="Newer assignment",
         priority="high",
         status="assigned"
     )
-    created2 = repo.create_assignment(assignment2)
+    created2 = assignment_repo.create_assignment(assignment2)
 
     # Inject dependencies
     import app.routers.webhook
     monkeypatch.setattr(app.routers.webhook, "session_service", session_service)
-    monkeypatch.setattr(app.routers.webhook, "assignment_repository", repo)
+    monkeypatch.setattr(app.routers.webhook, "assignment_repository", assignment_repo)
+    monkeypatch.setattr(app.routers.webhook, "technician_repository", technician_repo)
 
     # Technician sends message
     payload = get_sample_telegram_update("Working on it", chat_id=33333)
