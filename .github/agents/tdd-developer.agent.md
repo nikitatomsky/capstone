@@ -430,15 +430,105 @@ def get_sample_telegram_message(text: str, chat_id: int = 999):
 **Why**: Telegram payloads have specific structure; a helper ensures test consistency
 ```
 
-### End of Session
-Update `session-notes.md`:
-```markdown
-## 2026-08-02 - Webhook Implementation
-**Accomplishments**:
-- Implemented POST /webhook endpoint with TDD
-- All tests passing (RED-GREEN-REFACTOR complete)
-**Next**: Implement extraction service with LLM integration
+---
+
+## Memory Management
+
+**CRITICAL**: After completing any significant work (implementing a feature, fixing tests, completing a step), ALWAYS update memory files to preserve context for future sessions.
+
+### When to Update Memory
+
+Update memory after:
+- ✅ Completing a development step
+- ✅ Implementing a new feature with TDD
+- ✅ Fixing failing tests
+- ✅ Making architectural decisions
+- ✅ Discovering patterns or solutions worth preserving
+
+### Which Memory Files to Update
+
+1. **`.github/memory/session-notes.md`** - Main development log
+   - What was accomplished
+   - Key decisions made
+   - What's next
+   - Date each session
+
+2. **`.github/memory/patterns-discovered.md`** - Reusable patterns
+   - Test patterns discovered
+   - Code organization approaches
+   - Helper functions or utilities
+   - Architecture decisions
+
+3. **`.github/memory/scratch/working-notes.md`** - Active session notes
+   - Current blockers or issues
+   - Work in progress
+   - Temporary findings
+
+### How to Update Memory
+
+Use the `memory` tool with the `str_replace` command to update existing sections or `insert` to add new entries:
+
+```bash
+# Example: Update session notes after completing a step
+memory str_replace /memories/session-notes.md \
+  --old_str "**Next Steps**:\n- Implement webhook endpoint" \
+  --new_str "**Next Steps**:\n- Integrate extraction service\n\n## 2026-08-03 - Webhook Implementation Complete\n**Accomplishments**:\n- Implemented POST /webhook endpoint using TDD\n- All 15 tests passing (RED-GREEN-REFACTOR)\n- Telegram payload validation working\n**Decisions**:\n- Used FastAPI TestClient for webhook testing\n- Pydantic models for Telegram payload validation\n**Next**: Implement LLM extraction service"
 ```
+
+### Memory Update Template
+
+After completing work, add this to session-notes.md:
+
+```markdown
+## [DATE] - [Step/Feature Name]
+
+**Focus**: [What this work focused on]
+
+**Accomplishments**:
+- [What was implemented]
+- [Tests written and passing]
+- [Integration points completed]
+
+**Decisions**:
+- [Key architectural or implementation choices]
+- [Why certain approaches were chosen]
+
+**Patterns Discovered**:
+- [Any reusable patterns worth preserving]
+
+**Next Steps**:
+- [What should happen next]
+- [Any blockers or dependencies]
+```
+
+### Example Memory Update After Completing a Step
+
+```markdown
+## 2026-08-03 - Step 1-4: LLM Extraction Service
+
+**Focus**: Implement LLM-powered extraction from free-text messages
+
+**Accomplishments**:
+- Created ExtractionService with LLMProvider interface
+- Implemented AnthropicProvider using Claude API
+- All 12 extraction tests passing (mocked LLM calls)
+- JSON-mode extraction for structured output
+
+**Decisions**:
+- Used dependency inversion (abstract LLMProvider) for testability
+- Mocked LLM calls in tests to avoid API costs
+- Designed for easy OpenAI provider addition
+
+**Patterns Discovered**:
+- Mock LLM pattern: predefined responses for deterministic tests
+- JSON extraction with fallback to empty dict on parse errors
+
+**Next Steps**:
+- Integrate extraction service with webhook (Step 1-5)
+- Add conversation context to extraction prompts
+```
+
+**IMPORTANT**: Memory updates are NOT optional - they ensure continuity across sessions and help other agents understand project state.
 
 ---
 

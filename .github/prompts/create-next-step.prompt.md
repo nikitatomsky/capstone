@@ -218,6 +218,16 @@ Standard validation and progression workflow:
    - AI analyzes changes and creates conventional commit message
    - Automatically pushes to trigger next workflow
 
+4. **Update memory** (REQUIRED):
+   - Update `.github/memory/session-notes.md` with:
+     - Date and step/feature name
+     - What was accomplished
+     - Key decisions made
+     - Patterns discovered
+     - What's next
+   - Add reusable patterns to `.github/memory/patterns-discovered.md`
+   - Use the memory tool to preserve context for future sessions
+
 ## Success Criteria
 
 To complete this step successfully:
@@ -227,12 +237,14 @@ To complete this step successfully:
 - ✅ [Observable criterion 3 - state expected outcome clearly]
 - ✅ [Observable criterion 4 - testing criterion if applicable]
 - ✅ Changes are committed and pushed to `[branch-name]` using `/commit-and-push`
+- ✅ Memory updated in `.github/memory/session-notes.md` with accomplishments and next steps
 
 Examples:
 - ✅ All tests in `packages/backend/__tests__/app.test.js` pass (`npm test`)
 - ✅ No ESLint errors in backend (`npm run lint` in `packages/backend/`)
 - ✅ POST /api/todos endpoint returns 201 with created todo object
 - ✅ UI tests cover create/edit/delete workflows (run `/create-ui-tests` and `/run-ui-tests`)
+- ✅ Memory updated in `.github/memory/session-notes.md` with accomplishments and next steps
 
 ## Key Workflow Patterns
 
@@ -277,12 +289,14 @@ Before creating the GitHub Issue, verify your draft:
 - ✅ Names appropriate agents or prompts for execution (`/execute-step`, `/validate-step`, etc.)
 - ✅ Specifies which agent auto-switches happen (if using prompts)
 - ✅ Includes commit/push workflow using `/commit-and-push`
+- ✅ Includes memory update instructions in "Validate and Progress" activity
 
 **Completeness**:
 - ✅ Step is focused enough to complete in one session
 - ✅ Step is testable with clear pass/fail criteria
 - ✅ Step builds incrementally on prior work (if applicable)
 - ✅ Step preserves scope boundaries for future increments
+- ✅ Success criteria includes memory update requirement
 
 ### Step 7: Create the GitHub Issue
 
@@ -327,7 +341,6 @@ After creating the issue, provide this summary:
 1. Open the issue: [issue URL]
 2. Follow the instructions in the :keyboard: Activity sections
 3. Run `/validate-step X-Y` when complete
-4. Run `/commit-and-push` to progress
 ```
 
 ## Template Philosophy
