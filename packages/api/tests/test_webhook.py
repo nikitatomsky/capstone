@@ -757,3 +757,289 @@ def test_webhook_handles_multiple_assignments_correctly(client, monkeypatch):
     # Should link to the most recent assignment
     session = session_service.get_session(33333)
     assert session["intake_record"].assignment_id == created2.assignment_id
+
+
+# ============================================================================
+# Integration Tests: Telegram Invitation Flow (Step 4-2)
+# ============================================================================
+
+
+def test_webhook_handles_start_command_with_valid_token(client, monkeypatch):
+    """Test /start with valid token links chat_id to technician."""
+    from unittest.mock import AsyncMock, Mock
+
+    from app.models.technician import Technician
+    from app.repositories.technician_repository import FakeTechnicianRepository
+    from app.repositories.telegram_invitation_repository import TelegramInvitationRepository
+    from app.services.telegram_invitation_service import TelegramInvitationService
+
+    # Mock telegram client to track sent messages
+    mock_send = AsyncMock(return_value=True)
+    mock_telegram = Mock()
+    mock_telegram.send_message = mock_send
+
+    # Create invitation service and repository
+    invitation_repo = TelegramInvitationRepository()
+    invitation_service = TelegramInvitationService(invitation_repo, "test_bot", 3600)
+
+    # Generate invitation for technician
+    invitation = invitation_service.generate_invitation("tech-uuid-123")
+    token = invitation.telegram_link.split("start=")[1]
+
+    # Create technician record (not linked yet)
+    technician_repo = FakeTechnicianRepository()
+    technician = Technician(
+        technician_id="tech-uuid-123",
+        name="John Smith",
+        phone_number="+1-555-0123",
+        chat_id=None,  # Not linked yet
+    )
+    technician_repo.technicians["tech-uuid-123"] = technician
+
+    # Inject dependencies into webhook
+    import app.routers.webhook
+
+    monkeypatch.setattr(app.routers.webhook, "telegram_client", mock_telegram)
+    monkeypatch.setattr(app.routers.webhook, "invitation_service", invitation_service)
+    monkeypatch.setattr(app.routers.webhook, "technician_repository", technician_repo)
+
+    # Send /start command with token
+    payload = get_sample_telegram_update(
+        text=f"/start {token}",
+        chat_id=987654321,
+        user_id=987654321,
+    )
+
+    response = client.post("/webhook", json=payload)
+
+    assert response.status_code == 200
+
+    # Verify chat_id was linked to technician
+    updated_tech = technician_repo.get_technician("tech-uuid-123")
+    assert updated_tech.chat_id == 987654321
+
+    # Verify confirmation message was sent
+    mock_send.assert_called_once()
+    call_args = mock_send.call_args
+    assert call_args[0][0] == 987654321  # chat_id
+    message_text = call_args[0][1]
+    assert "connected" in message_text.lower() or "hi" in message_text.lower()
+    assert "john smith" in message_text.lower()
+
+
+def test_webhook_handles_start_command_with_expired_token(client, monkeypatch):
+    """Test /start with expired token sends error message."""
+    from datetime import UTC, datetime, timedelta
+    from unittest.mock import AsyncMock, Mock
+
+    from app.repositories.technician_repository import FakeTechnicianRepository
+    from app.repositories.telegram_invitation_repository import TelegramInvitationRepository
+    from app.services.telegram_invitation_service import TelegramInvitationService
+
+    # Mock telegram client to track sent messages
+    mock_send = AsyncMock(return_value=True)
+    mock_telegram = Mock()
+    mock_telegram.send_message = mock_send
+
+    # Create invitation service with very short TTL
+    invitation_repo = TelegramInvitationRepository()
+    invitation_service = TelegramInvitationService(invitation_repo, "test_bot", ttl_seconds=1)
+
+    # Generate invitation
+    invitation = invitation_service.generate_invitation("tech-uuid-456")
+    token = invitation.telegram_link.split("start=")[1]
+
+    # Manually expire the invitation
+    invitation.expires_at = datetime.now(UTC) - timedelta(hours=1)
+    invitation_repo._invitations[invitation.token_hash] = invitation
+
+    # Create technician repository
+    technician_repo = FakeTechnicianRepository()
+
+    # Inject dependencies
+    import app.routers.webhook
+
+    monkeypatch.setattr(app.routers.webhook, "telegram_client", mock_telegram)
+    monkeypatch.setattr(app.routers.webhook, "invitation_service", invitation_service)
+    monkeypatch.setattr(app.routers.webhook, "technician_repository", technician_repo)
+
+    # Send /start command with expired token
+    payload = get_sample_telegram_update(
+        text=f"/start {token}",
+        chat_id=111222333,
+    )
+
+    response = client.post("/webhook", json=payload)
+
+    assert response.status_code == 200
+
+    # Verify error message was sent
+    mock_send.assert_called_once()
+    call_args = mock_send.call_args
+    message_text = call_args[0][1]
+    assert "invalid" in message_text.lower() or "expired" in message_text.lower()
+
+
+def test_webhook_handles_start_command_with_used_token(client, monkeypatch):
+    """Test /start with already-used token sends error message."""
+    from unittest.mock import AsyncMock, Mock
+
+    from app.models.technician import Technician
+    from app.repositories.technician_repository import FakeTechnicianRepository
+    from app.repositories.telegram_invitation_repository import TelegramInvitationRepository
+    from app.services.telegram_invitation_service import TelegramInvitationService
+
+    # Mock telegram client
+    mock_send = AsyncMock(return_value=True)
+    mock_telegram = Mock()
+    mock_telegram.send_message = mock_send
+
+    # Create invitation service
+    invitation_repo = TelegramInvitationRepository()
+    invitation_service = TelegramInvitationService(invitation_repo, "test_bot", 3600)
+
+    # Generate invitation
+    invitation = invitation_service.generate_invitation("tech-uuid-789")
+    token = invitation.telegram_link.split("start=")[1]
+
+    # Create technician
+    technician_repo = FakeTechnicianRepository()
+    technician = Technician(
+        technician_id="tech-uuid-789",
+        name="Jane Doe",
+        phone_number="+1-555-0789",
+        chat_id=None,
+    )
+    technician_repo.technicians["tech-uuid-789"] = technician
+
+    # Inject dependencies
+    import app.routers.webhook
+
+    monkeypatch.setattr(app.routers.webhook, "telegram_client", mock_telegram)
+    monkeypatch.setattr(app.routers.webhook, "invitation_service", invitation_service)
+    monkeypatch.setattr(app.routers.webhook, "technician_repository", technician_repo)
+
+    # First use of token - should succeed
+    payload1 = get_sample_telegram_update(text=f"/start {token}", chat_id=444555666)
+    client.post("/webhook", json=payload1)
+
+    # Reset mock
+    mock_send.reset_mock()
+
+    # Try to use same token again - should fail
+    payload2 = get_sample_telegram_update(text=f"/start {token}", chat_id=777888999)
+    response = client.post("/webhook", json=payload2)
+
+    assert response.status_code == 200
+
+    # Verify error message was sent
+    mock_send.assert_called_once()
+    call_args = mock_send.call_args
+    message_text = call_args[0][1]
+    assert "invalid" in message_text.lower() or "used" in message_text.lower() or "expired" in message_text.lower()
+
+
+def test_webhook_handles_start_command_with_invalid_token(client, monkeypatch):
+    """Test /start with invalid token sends error message."""
+    from unittest.mock import AsyncMock, Mock
+
+    from app.repositories.technician_repository import FakeTechnicianRepository
+    from app.repositories.telegram_invitation_repository import TelegramInvitationRepository
+    from app.services.telegram_invitation_service import TelegramInvitationService
+
+    # Mock telegram client
+    mock_send = AsyncMock(return_value=True)
+    mock_telegram = Mock()
+    mock_telegram.send_message = mock_send
+
+    # Create invitation service
+    invitation_repo = TelegramInvitationRepository()
+    invitation_service = TelegramInvitationService(invitation_repo, "test_bot", 3600)
+
+    # Create technician repository
+    technician_repo = FakeTechnicianRepository()
+
+    # Inject dependencies
+    import app.routers.webhook
+
+    monkeypatch.setattr(app.routers.webhook, "telegram_client", mock_telegram)
+    monkeypatch.setattr(app.routers.webhook, "invitation_service", invitation_service)
+    monkeypatch.setattr(app.routers.webhook, "technician_repository", technician_repo)
+
+    # Send /start with completely invalid token
+    payload = get_sample_telegram_update(
+        text="/start completely_invalid_token_xyz",
+        chat_id=123456789,
+    )
+
+    response = client.post("/webhook", json=payload)
+
+    assert response.status_code == 200
+
+    # Verify error message was sent
+    mock_send.assert_called_once()
+    call_args = mock_send.call_args
+    message_text = call_args[0][1]
+    assert "invalid" in message_text.lower()
+
+
+def test_webhook_start_command_without_token(client, monkeypatch):
+    """Test /start without token sends welcome message."""
+    from unittest.mock import AsyncMock, Mock
+
+    # Mock telegram client
+    mock_send = AsyncMock(return_value=True)
+    mock_telegram = Mock()
+    mock_telegram.send_message = mock_send
+
+    # Inject dependencies
+    import app.routers.webhook
+
+    monkeypatch.setattr(app.routers.webhook, "telegram_client", mock_telegram)
+
+    # Send /start without token
+    payload = get_sample_telegram_update(text="/start", chat_id=555666777)
+
+    response = client.post("/webhook", json=payload)
+
+    assert response.status_code == 200
+
+    # Verify welcome message was sent
+    mock_send.assert_called_once()
+    call_args = mock_send.call_args
+    message_text = call_args[0][1]
+    assert "welcome" in message_text.lower() or "invitation" in message_text.lower()
+
+
+def test_webhook_preserves_existing_functionality_after_start_handling(client, monkeypatch):
+    """Test that regular messages still work after adding /start handling."""
+    from app.services.session_service import SessionService
+
+    session_service = SessionService()
+
+    class MockExtraction:
+        def extract_from_message(self, text):
+            return {"location": "123 Test St"}
+
+    extraction_service = MockExtraction()
+
+    # Inject dependencies
+    import app.routers.webhook
+
+    monkeypatch.setattr(app.routers.webhook, "session_service", session_service)
+    monkeypatch.setattr(app.routers.webhook, "extraction_service", extraction_service)
+
+    # Send regular service report message (not /start command)
+    payload = get_sample_telegram_update(
+        text="Completed work at 123 Test St",
+        chat_id=888999000,
+    )
+
+    response = client.post("/webhook", json=payload)
+
+    assert response.status_code == 200
+
+    # Verify session was created and extraction worked
+    session = session_service.get_session(888999000)
+    assert session is not None
+    assert session["intake_record"].location == "123 Test St"

@@ -48,7 +48,8 @@ class TelegramInvitationService:
         telegram_link = f"https://t.me/{self.bot_username}?start={token}"
 
         # Set expiration
-        now = datetime.now()
+        from datetime import UTC
+        now = datetime.now(UTC)
         expires_at = now + timedelta(seconds=self.ttl_seconds)
         expires_at_ttl = int(expires_at.timestamp())
 
@@ -93,7 +94,8 @@ class TelegramInvitationService:
             return None  # Token already used
 
         # Check if expired
-        if datetime.now() > invitation.expires_at:
+        from datetime import UTC
+        if datetime.now(UTC) > invitation.expires_at:
             return None  # Token expired
 
         # Mark as used
