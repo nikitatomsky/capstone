@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 session_service = None
 extraction_service = None
 telegram_client = None
+assignment_repository = None
 
 # Helper functions - will be injected from main.py
 _truncate_for_log = None
@@ -28,18 +29,20 @@ def init_dependencies(
     truncate_fn,
     get_missing_fn,
     generate_followup_fn,
+    assignment_repo=None,
 ):
     """
     Initialize router dependencies.
-    
+
     This is called from main.py to inject services and helper functions.
     """
-    global session_service, extraction_service, telegram_client
+    global session_service, extraction_service, telegram_client, assignment_repository
     global _truncate_for_log, get_missing_fields, generate_followup_question
-    
+
     session_service = session_svc
     extraction_service = extraction_svc
     telegram_client = telegram_cl
+    assignment_repository = assignment_repo
     _truncate_for_log = truncate_fn
     get_missing_fields = get_missing_fn
     generate_followup_question = generate_followup_fn
@@ -81,6 +84,26 @@ async def webhook(update: TelegramUpdate):
         # Get or create session for this chat
         session = session_service.get_or_create_session(chat_id)
 
+        # Link session to active assignment if available (Step 2-3)
+        if assignment_repository and not session["intake_record"].assignment_id:
+            active_assignment = assignment_repository.get_active_assignment_for_technician(chat_id)
+            if active_assignment:
+                # Link intake record to assignment
+                session_service.update_intake_field(
+                    chat_id, "assignment_id", active_assignment.assignment_id
+                )
+                logger.info(f"Linked session to assignment {active_assignment.assignment_id}")
+
+                # Update assignment status to "in_progress" if technician is starting work
+                if active_assignment.status in ["pending", "assigned"]:
+                    assignment_repository.update_assignment_status(
+                        active_assignment.assignment_id, "in_progress"
+                    )
+                    logger.info(
+                        f"Updated assignment {active_assignment.assignment_id} "
+                        f"status to in_progress"
+                    )
+
         # Log message to conversation history
         session_service.add_message(chat_id, message_text)
 
@@ -103,6 +126,24 @@ async def webhook(update: TelegramUpdate):
         if not missing_fields:
             # Record is complete
             logger.info(f"Intake record complete for chat_id={chat_id}")
+
+            # Update linked assignment if exists (Step 2-3)
+            if assignment_repository and intake_record.assignment_id:
+                from datetime import UTC, datetime
+
+                # Generate intake_record_id (in future, this will come from DB persistence)
+                intake_record_id = f"intake_{chat_id}_{int(datetime.now(UTC).timestamp())}"
+
+                # Complete the assignment with intake record link
+                updated_assignment = assignment_repository.complete_assignment(
+                    intake_record.assignment_id,
+                    intake_record_id
+                )
+                if updated_assignment:
+                    logger.info(
+                        f"Completed assignment {intake_record.assignment_id} "
+                        f"with intake_record_id={intake_record_id}"
+                    )
 
             # TODO: Persist to database and send notification (Step 1-6)
             response_text = (
@@ -145,7 +186,7 @@ async def webhook(update: TelegramUpdate):
     except ValueError as e:
         # Handle validation errors from SessionService
         logger.error(f"Invalid input: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except HTTPException:
         # Re-raise HTTP exceptions
         raise
@@ -154,4 +195,4 @@ async def webhook(update: TelegramUpdate):
         logger.exception("Unexpected error processing webhook")
         raise HTTPException(
             status_code=500, detail="Internal server error processing webhook"
-        )
+        ) from None

@@ -65,6 +65,41 @@ class FakeStorage(StorageInterface):
 
 ---
 
+## Service Integration Patterns
+
+### Non-Blocking Notification Pattern
+
+```python
+async def create_assignment(
+    assignment_data: AssignmentCreate,
+    repo: AssignmentRepository = Depends(get_assignment_repo),
+    telegram: TelegramClient = Depends(get_telegram_client)
+) -> Assignment:
+    # Create core entity first (source of truth)
+    assignment = repo.create_assignment(assignment_data)
+    
+    # Send notification (best-effort, non-blocking)
+    try:
+        await telegram.send_assignment_notification(
+            chat_id=assignment.technician_chat_id,
+            assignment_id=assignment.assignment_id,
+            title=assignment.title,
+            description=assignment.description,
+            priority=assignment.priority
+        )
+    except Exception as e:
+        # Log error but don't fail assignment creation
+        logger.error(f"Failed to send notification: {e}")
+    
+    return assignment
+```
+
+**Why**: External service failures (Telegram API) shouldn't prevent core operations. The database is the source of truth; notifications are best-effort delivery. This prevents cascading failures and maintains data integrity.
+
+**When to use**: Any integration with external services (email, SMS, webhooks, third-party APIs) where the external call is not critical to the core business operation.
+
+---
+
 ## Placeholder Conventions
 
 ### Clear Naming for TODOs

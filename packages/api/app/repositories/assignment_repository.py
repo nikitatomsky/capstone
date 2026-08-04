@@ -43,6 +43,36 @@ class AssignmentRepository(ABC):
         """Update assignment status and return updated assignment, or None if not found."""
 
     @abstractmethod
+    def complete_assignment(self, assignment_id: str, intake_record_id: str) -> Assignment | None:
+        """
+        Mark assignment as completed with intake record link.
+
+        Sets status to 'completed', sets intake_record_id, and sets completed_at timestamp.
+
+        Args:
+            assignment_id: ID of the assignment to complete
+            intake_record_id: ID of the completed intake record
+
+        Returns:
+            Updated Assignment or None if not found
+        """
+
+    @abstractmethod
+    def get_active_assignment_for_technician(self, chat_id: int) -> Assignment | None:
+        """
+        Get the most recent active assignment for a technician.
+
+        Active means status is one of: pending, assigned, in_progress.
+        If multiple active assignments exist, return the most recently created one.
+
+        Args:
+            chat_id: Telegram chat_id of the technician
+
+        Returns:
+            Most recent active Assignment or None if no active assignments exist
+        """
+
+    @abstractmethod
     def create_technician(self, technician: Technician) -> Technician:
         """Register a new technician and return it."""
 
@@ -167,6 +197,66 @@ class DynamoDBAssignmentRepository(AssignmentRepository):
         except ClientError:
             return None
 
+    def complete_assignment(self, assignment_id: str, intake_record_id: str) -> Assignment | None:
+        """Mark assignment as completed with intake record link in DynamoDB."""
+        from datetime import UTC, datetime
+
+        try:
+            completed_at = datetime.now(UTC).isoformat()
+
+            response = self.assignments_table.update_item(
+                Key={"assignment_id": assignment_id},
+                UpdateExpression=(
+                    "SET #status = :status, "
+                    "intake_record_id = :intake_id, "
+                    "completed_at = :completed"
+                ),
+                ExpressionAttributeNames={"#status": "status"},
+                ExpressionAttributeValues={
+                    ":status": "completed",
+                    ":intake_id": intake_record_id,
+                    ":completed": completed_at
+                },
+                ReturnValues="ALL_NEW"
+            )
+
+            if "Attributes" not in response:
+                return None
+
+            return self._item_to_assignment(response["Attributes"])
+        except ClientError:
+            return None
+
+    def get_active_assignment_for_technician(self, chat_id: int) -> Assignment | None:
+        """Get the most recent active assignment for a technician from DynamoDB."""
+        try:
+            # Query using GSI on technician_chat_id
+            # Note: This assumes a GSI exists on technician_chat_id
+            # For now, we'll scan and filter (less efficient but works for demo)
+            response = self.assignments_table.scan(
+                FilterExpression=(
+                    "technician_chat_id = :chat_id AND "
+                    "#status IN (:pending, :assigned, :in_progress)"
+                ),
+                ExpressionAttributeNames={"#status": "status"},
+                ExpressionAttributeValues={
+                    ":chat_id": chat_id,
+                    ":pending": "pending",
+                    ":assigned": "assigned",
+                    ":in_progress": "in_progress"
+                }
+            )
+
+            items = response.get("Items", [])
+            if not items:
+                return None
+
+            # Convert to Assignment objects and find most recent
+            assignments = [self._item_to_assignment(item) for item in items]
+            return max(assignments, key=lambda a: a.created_at)
+        except ClientError:
+            return None
+
     def create_technician(self, technician: Technician) -> Technician:
         """Register a new technician in DynamoDB."""
         item = {
@@ -277,6 +367,46 @@ class FakeAssignmentRepository(AssignmentRepository):
         )
         self._assignments[assignment_id] = updated
         return updated
+
+    def complete_assignment(self, assignment_id: str, intake_record_id: str) -> Assignment | None:
+        """Mark assignment as completed with intake record link."""
+        from datetime import UTC, datetime
+
+        assignment = self._assignments.get(assignment_id)
+        if assignment is None:
+            return None
+
+        # Create updated assignment with completed status and intake link
+        updated = Assignment(
+            assignment_id=assignment.assignment_id,
+            technician_chat_id=assignment.technician_chat_id,
+            technician_name=assignment.technician_name,
+            title=assignment.title,
+            description=assignment.description,
+            priority=assignment.priority,
+            status="completed",
+            created_at=assignment.created_at,
+            assigned_at=assignment.assigned_at,
+            completed_at=datetime.now(UTC),
+            intake_record_id=intake_record_id
+        )
+        self._assignments[assignment_id] = updated
+        return updated
+
+    def get_active_assignment_for_technician(self, chat_id: int) -> Assignment | None:
+        """Get the most recent active assignment for a technician."""
+        # Find all active assignments for this technician
+        active_statuses = {"pending", "assigned", "in_progress"}
+        active_assignments = [
+            a for a in self._assignments.values()
+            if a.technician_chat_id == chat_id and a.status in active_statuses
+        ]
+
+        if not active_assignments:
+            return None
+
+        # Return the most recently created one
+        return max(active_assignments, key=lambda a: a.created_at)
 
     def create_technician(self, technician: Technician) -> Technician:
         self._technicians[technician.chat_id] = technician
