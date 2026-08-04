@@ -13,7 +13,7 @@ load_dotenv()
 from app import handlers
 from app.constants import MAX_LOG_MESSAGE_LENGTH
 from app.exceptions import MissingMessageError, MissingTextError, WebhookError
-from app.routers import health, webhook
+from app.routers import assignment, health, webhook
 from app.services.extraction_service import ExtractionService
 from app.services.intake_helpers import generate_followup_question, get_missing_fields
 from app.services.llm_providers import AnthropicProvider
@@ -82,3 +82,4 @@ webhook.init_dependencies(
 # Include routers
 app.include_router(health.router)
 app.include_router(webhook.router)
+app.include_router(assignment.router)
