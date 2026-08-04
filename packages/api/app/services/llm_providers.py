@@ -82,7 +82,7 @@ class AnthropicProvider(LLMProvider):
             LLMAPIError: If API call fails
         """
         start_time = time.time()
-        
+
         try:
             response = self.client.messages.create(
                 model=self.model,
@@ -92,17 +92,17 @@ class AnthropicProvider(LLMProvider):
             )
 
             duration = time.time() - start_time
-            
+
             # Extract text from response content, handling both TextBlock and ThinkingBlock
             result = ""
             for block in response.content:
                 if hasattr(block, "text"):
                     result = block.text
                     break
-            
+
             if not result:
                 raise LLMAPIError("No text content in LLM response")
-            
+
             # Log usage metrics for cost tracking
             logger.info(
                 f"LLM API call completed: "
@@ -112,19 +112,19 @@ class AnthropicProvider(LLMProvider):
                 f"output_tokens={response.usage.output_tokens}, "
                 f"response_chars={len(result)}"
             )
-            
+
             return result
 
         except APIError as e:
             duration = time.time() - start_time
             error_msg = str(e).lower()
             logger.exception("Anthropic API error")
-            
+
             # Log failed attempt metrics
             logger.warning(
                 f"LLM API call failed after {duration:.2f}s: {error_msg[:100]}"
             )
-            
+
             # Provide specific error messages for common issues
             if "rate_limit" in error_msg:
                 raise LLMAPIError("Rate limit exceeded") from e

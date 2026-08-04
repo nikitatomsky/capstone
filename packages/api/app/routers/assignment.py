@@ -71,7 +71,7 @@ async def create_assignment(
     )
 
     created_assignment = repo.create_assignment(assignment)
-    
+
     # Send Telegram notification to technician (Step 2-2)
     if telegram_client:
         notification_message = (
@@ -92,12 +92,13 @@ async def create_assignment(
             )
         except Exception as e:
             logger.error(
-                f"Failed to send Telegram notification for assignment {created_assignment.assignment_id}: {e}"
+                f"Failed to send Telegram notification for assignment "
+                f"{created_assignment.assignment_id}: {e}"
             )
             # Don't fail the request if notification fails
     else:
         logger.warning("Telegram client not available - notification not sent")
-    
+
     return created_assignment
 
 

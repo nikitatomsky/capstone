@@ -106,14 +106,14 @@ class SessionService:
         """
         session = self.get_or_create_session(chat_id)
         history = session["conversation_history"]
-        
+
         history.append(
             {
                 "message": message_text,
                 "timestamp": datetime.now(UTC).isoformat(),
             }
         )
-        
+
         # Trim old messages if exceeding limit
         if len(history) > MAX_CONVERSATION_HISTORY:
             removed = len(history) - MAX_CONVERSATION_HISTORY
@@ -122,7 +122,7 @@ class SessionService:
                 f"Trimmed {removed} old messages for chat_id={chat_id} "
                 f"(limit={MAX_CONVERSATION_HISTORY})"
             )
-        
+
         logger.debug(
             f"Added message to conversation history for chat_id={chat_id}, "
             f"total messages={len(session['conversation_history'])}"
@@ -140,7 +140,7 @@ class SessionService:
             value: New value for the field
 
         Raises:
-            ValueError: If chat_id is not positive, field name is invalid, 
+            ValueError: If chat_id is not positive, field name is invalid,
                        or value fails validation
         """
         from pydantic import ValidationError

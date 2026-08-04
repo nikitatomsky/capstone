@@ -17,7 +17,7 @@ from pydantic import ValidationError
 def test_assignment_creation_with_required_fields():
     """Test minimal valid assignment creation with all required fields."""
     from app.models.assignment import Assignment
-    
+
     assignment = Assignment(
         technician_chat_id=12345678,
         technician_name="John Smith",
@@ -25,7 +25,7 @@ def test_assignment_creation_with_required_fields():
         description="Check heating system in Building 5, Room 203",
         priority="high"
     )
-    
+
     assert assignment.technician_chat_id == 12345678
     assert assignment.technician_name == "John Smith"
     assert assignment.title == "HVAC Repair - Building 5"
@@ -36,7 +36,7 @@ def test_assignment_creation_with_required_fields():
 def test_assignment_defaults():
     """Test that Assignment sets correct default values."""
     from app.models.assignment import Assignment
-    
+
     assignment = Assignment(
         technician_chat_id=12345678,
         technician_name="John Smith",
@@ -44,19 +44,19 @@ def test_assignment_defaults():
         description="Test description",
         priority="low"
     )
-    
+
     # Default status should be "pending"
     assert assignment.status == "pending"
-    
+
     # created_at should be auto-set to current time
     assert assignment.created_at is not None
     assert isinstance(assignment.created_at, datetime)
-    
+
     # assignment_id should be auto-generated UUID string
     assert assignment.assignment_id is not None
     assert isinstance(assignment.assignment_id, str)
     assert len(assignment.assignment_id) > 0
-    
+
     # Optional timestamps should be None by default
     assert assignment.assigned_at is None
     assert assignment.completed_at is None
@@ -66,7 +66,7 @@ def test_assignment_defaults():
 def test_assignment_invalid_priority():
     """Test that Assignment validates priority enum values."""
     from app.models.assignment import Assignment
-    
+
     with pytest.raises(ValidationError) as exc_info:
         Assignment(
             technician_chat_id=12345678,
@@ -75,7 +75,7 @@ def test_assignment_invalid_priority():
             description="Test description",
             priority="invalid_priority"  # Invalid value
         )
-    
+
     errors = exc_info.value.errors()
     assert len(errors) > 0
     # Check that the error is about the priority field
@@ -85,7 +85,7 @@ def test_assignment_invalid_priority():
 def test_assignment_invalid_status():
     """Test that Assignment validates status enum values."""
     from app.models.assignment import Assignment
-    
+
     with pytest.raises(ValidationError) as exc_info:
         Assignment(
             technician_chat_id=12345678,
@@ -95,7 +95,7 @@ def test_assignment_invalid_status():
             priority="low",
             status="invalid_status"  # Invalid value
         )
-    
+
     errors = exc_info.value.errors()
     assert len(errors) > 0
     # Check that the error is about the status field
@@ -105,9 +105,9 @@ def test_assignment_invalid_status():
 def test_assignment_with_all_fields():
     """Test Assignment creation with all fields including optional ones."""
     from app.models.assignment import Assignment
-    
+
     now = datetime.now(UTC)
-    
+
     assignment = Assignment(
         assignment_id="test-uuid-123",
         technician_chat_id=12345678,
@@ -121,7 +121,7 @@ def test_assignment_with_all_fields():
         completed_at=now,
         intake_record_id="intake-uuid-456"
     )
-    
+
     assert assignment.assignment_id == "test-uuid-123"
     assert assignment.status == "completed"
     assert assignment.assigned_at == now
@@ -132,9 +132,9 @@ def test_assignment_with_all_fields():
 def test_assignment_valid_priorities():
     """Test all valid priority values are accepted."""
     from app.models.assignment import Assignment
-    
+
     valid_priorities = ["low", "medium", "high", "urgent"]
-    
+
     for priority in valid_priorities:
         assignment = Assignment(
             technician_chat_id=12345678,
@@ -149,9 +149,9 @@ def test_assignment_valid_priorities():
 def test_assignment_valid_statuses():
     """Test all valid status values are accepted."""
     from app.models.assignment import Assignment
-    
+
     valid_statuses = ["pending", "assigned", "in_progress", "completed", "cancelled"]
-    
+
     for status in valid_statuses:
         assignment = Assignment(
             technician_chat_id=12345678,
@@ -167,14 +167,14 @@ def test_assignment_valid_statuses():
 def test_assignment_missing_required_fields():
     """Test that missing required fields raise validation errors."""
     from app.models.assignment import Assignment
-    
+
     # Missing all required fields
     with pytest.raises(ValidationError) as exc_info:
         Assignment()
-    
+
     errors = exc_info.value.errors()
     assert len(errors) >= 5  # At least 5 required fields
-    
+
     # Check that all required fields are in the error list
     error_fields = {e["loc"][0] for e in errors}
     assert "technician_chat_id" in error_fields
