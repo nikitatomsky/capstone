@@ -31,8 +31,8 @@ class Technician(BaseModel):
         description="Display name of the technician"
     )
 
-    phone_number: str = Field(
-        min_length=1,
+    phone_number: str | None = Field(
+        default=None,
         description="Phone number (can be actual phone or UUID placeholder)"
     )
 
@@ -56,9 +56,9 @@ class Technician(BaseModel):
 
     @field_validator('phone_number')
     @classmethod
-    def validate_phone_not_empty(cls, v: str) -> str:
-        """Ensure phone_number is not empty or whitespace only."""
-        if not v or not v.strip():
+    def validate_phone_not_empty(cls, v: str | None) -> str | None:
+        """Ensure phone_number is not empty or whitespace only if provided."""
+        if v is not None and (not v or not v.strip()):
             raise ValueError('Phone number cannot be empty')
         return v
 
@@ -76,8 +76,8 @@ class TechnicianCreate(BaseModel):
         description="Display name of the technician"
     )
 
-    phone_number: str = Field(
-        min_length=1,
+    phone_number: str | None = Field(
+        default=None,
         description="Phone number (can be actual phone or UUID placeholder)"
     )
 

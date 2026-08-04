@@ -93,14 +93,13 @@ def test_technician_missing_required_fields():
         Technician()
 
     errors = exc_info.value.errors()
-    # Issue #30: Only name and phone_number are required now
-    # (technician_id auto-generated, chat_id optional)
-    assert len(errors) >= 2  # At least 2 required fields
+    # Issue #30: Only name is required now
+    # (technician_id auto-generated, phone_number optional, chat_id optional)
+    assert len(errors) >= 1  # At least 1 required field (name)
 
-    # Check that all required fields are in the error list
+    # Check that name field is in the error list
     error_fields = {e["loc"][0] for e in errors}
     assert "name" in error_fields
-    assert "phone_number" in error_fields
 
 
 # ============================================================================
