@@ -279,6 +279,60 @@ class IntakeRecord:
 
 ---
 
+## 2026-08-04 - Step 2-4: Enable DynamoDB Persistence for Assignment Workflow
+
+**Focus**: Switch from in-memory FakeAssignmentRepository to production-ready DynamoDBAssignmentRepository with deployed AWS tables
+
+**Accomplishments**:
+- ✅ Deployed DynamoDB tables to AWS us-east-1 via Terraform
+  - field-intake-assignments-dev with 2 GSIs (StatusIndex, TechnicianIndex)
+  - field-intake-records-dev with 1 GSI (AssignmentIndex)
+  - field-intake-technicians-dev
+- ✅ Switched assignment.py to use DynamoDBAssignmentRepository in production
+- ✅ Implemented lazy repository initialization to enable test mocking
+- ✅ Added test fixture to automatically inject FakeAssignmentRepository in all tests
+- ✅ All 96 tests passing (test isolation maintained with FakeAssignmentRepository)
+- ✅ Manual verification: created assignment, restarted server, assignment persisted
+- ✅ Direct DynamoDB verification via AWS CLI confirmed data persistence
+- ✅ Zero lint errors, code quality maintained
+
+**Key Decisions**:
+
+1. **Lazy Initialization Pattern**:
+   - Changed `_repository_instance = DynamoDBAssignmentRepository()` to `_repository_instance = None`
+   - Initialization happens in `get_assignment_repo()` function
+   - Prevents boto3 connection at module import time
+   - Allows test fixtures to mock repository before initialization
+
+2. **Test Isolation Strategy**:
+   - Added `setup_test_repository` fixture (autouse=True)
+   - Automatically injects FakeAssignmentRepository for all tests
+   - Tests run fast without AWS dependencies
+   - Production code uses real DynamoDB, tests use fake
+
+3. **Region Configuration**:
+   - Used us-east-1 (user preference over us-east-2)
+   - Updated terraform.tfvars with correct region
+   - AWS credentials via `aws configure export-credentials`
+
+**Technical Implementation**:
+- Modified `app/routers/assignment.py`: lazy repository initialization
+- Modified `tests/conftest.py`: added repository mocking fixture
+- Updated `infra/stacks/dev/terraform.tfvars`: set aws_region to us-east-1
+- Deployed infrastructure: `terraform init && terraform apply -auto-approve`
+
+**Testing Results**:
+- Unit/Integration tests: 96 passed, 1 skipped (all using FakeAssignmentRepository)
+- Manual persistence test: Assignment survived server restart ✅
+- AWS DynamoDB verification: Direct query confirmed data in table ✅
+
+**What's Next**:
+- Step 2-3 is actually already complete (webhook-assignment integration)
+- Consider adding intake record persistence to DynamoDB (currently in-memory)
+- Consider Phase 4: React SPA with real-time updates (stretch goal)
+
+---
+
 ## 2026-08-03 - Step 2-1: Assignment API with DynamoDB Persistence
 
 **Focus**: Implement Assignment API layer with DynamoDB persistence using strict TDD
