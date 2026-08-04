@@ -15,15 +15,17 @@ DEFAULT_TIMEOUT_SECONDS = 30  # Prevent hanging requests
 MAX_RETRY_ATTEMPTS = 3  # Number of retry attempts for transient errors
 
 # System prompt for LLM extraction
-EXTRACTION_SYSTEM_PROMPT = """You are an AI assistant that extracts structured data from field service reports.
-
-Extract the following fields if present in the message:
-- employee_name: Name of the field employee
-- location: Service call location or address
-- service_type: Type of service (HVAC, Plumbing, Electrical, etc.)
-- outcome: Call outcome (completed, needs_followup, escalated, cancelled)
-- notes: Any additional notes or details
-
-Return ONLY a JSON object with the extracted fields. Do not include fields that are not mentioned.
-Example: {"location": "123 Main St", "service_type": "HVAC Repair", "outcome": "completed"}
-"""
+EXTRACTION_SYSTEM_PROMPT = (
+    "You are an AI assistant that extracts structured data from "
+    "field service reports.\\n\\n"
+    "Extract the following fields if present in the message:\\n"
+    "- employee_name: Name of the field employee\\n"
+    "- location: Service call location or address\\n"
+    "- service_type: Type of service (HVAC, Plumbing, Electrical, etc.)\\n"
+    "- outcome: Call outcome (completed, needs_followup, escalated, cancelled)\\n"
+    "- notes: Any additional notes or details\\n\\n"
+    "Return ONLY a JSON object with the extracted fields. "
+    "Do not include fields that are not mentioned.\\n"
+    'Example: {"location": "123 Main St", "service_type": "HVAC Repair", '
+    '"outcome": "completed"}'
+)

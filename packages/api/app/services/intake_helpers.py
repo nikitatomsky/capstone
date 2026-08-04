@@ -40,9 +40,18 @@ def generate_followup_question(missing_fields: list[str]) -> str:
 
     # Prioritize fields and ask about the most important one
     field_questions = {
-        "location": "Where did you perform this service call? Please provide the address or location.",
-        "service_type": "What type of service did you perform? (e.g., HVAC, Plumbing, Electrical)",
-        "outcome": "What was the outcome of the service call? (e.g., completed, needs_followup, escalated)",
+        "location": (
+            "Where did you perform this service call? "
+            "Please provide the address or location."
+        ),
+        "service_type": (
+            "What type of service did you perform? "
+            "(e.g., HVAC, Plumbing, Electrical)"
+        ),
+        "outcome": (
+            "What was the outcome of the service call? "
+            "(e.g., completed, needs_followup, escalated)"
+        ),
     }
 
     # Ask about first missing field

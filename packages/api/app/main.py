@@ -8,17 +8,26 @@ from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 
 # Load environment variables from .env file
+# Must be called before importing app modules that depend on env vars
 load_dotenv()
 
-from app import handlers
-from app.constants import MAX_LOG_MESSAGE_LENGTH
-from app.exceptions import MissingMessageError, MissingTextError, WebhookError
-from app.routers import assignment, health, webhook
-from app.services.extraction_service import ExtractionService
-from app.services.intake_helpers import generate_followup_question, get_missing_fields
-from app.services.llm_providers import AnthropicProvider
-from app.services.session_service import SessionService
-from app.services.telegram_client import TelegramClient
+# noqa: E402 - imports after load_dotenv() to ensure env vars are available
+from app import handlers  # noqa: E402
+from app.constants import MAX_LOG_MESSAGE_LENGTH  # noqa: E402
+from app.exceptions import (  # noqa: E402
+    MissingMessageError,
+    MissingTextError,
+    WebhookError,
+)
+from app.routers import assignment, health, webhook  # noqa: E402
+from app.services.extraction_service import ExtractionService  # noqa: E402
+from app.services.intake_helpers import (  # noqa: E402
+    generate_followup_question,
+    get_missing_fields,
+)
+from app.services.llm_providers import AnthropicProvider  # noqa: E402
+from app.services.session_service import SessionService  # noqa: E402
+from app.services.telegram_client import TelegramClient  # noqa: E402
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -70,7 +79,10 @@ def _truncate_for_log(text: str | None, max_length: int = MAX_LOG_MESSAGE_LENGTH
 
 
 # Initialize webhook router with dependencies
-from app.routers.assignment import _repository_instance as assignment_repo
+# Import after app initialization to avoid circular dependency
+from app.routers.assignment import (  # noqa: E402
+    _repository_instance as assignment_repo,
+)
 
 webhook.init_dependencies(
     session_service,

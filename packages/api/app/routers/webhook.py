@@ -48,6 +48,93 @@ def init_dependencies(
     generate_followup_question = generate_followup_fn
 
 
+def _link_session_to_assignment(chat_id: int, session: dict) -> None:
+    """
+    Link session to active assignment and update assignment status.
+
+    Args:
+        chat_id: Telegram chat ID
+        session: Session dictionary containing intake record
+    """
+    if not assignment_repository or session["intake_record"].assignment_id:
+        return
+
+    active_assignment = (
+        assignment_repository.get_active_assignment_for_technician(chat_id)
+    )
+    if not active_assignment:
+        return
+
+    # Link intake record to assignment
+    session_service.update_intake_field(
+        chat_id, "assignment_id", active_assignment.assignment_id
+    )
+    logger.info(
+        f"Linked session to assignment {active_assignment.assignment_id}"
+    )
+
+    # Update assignment status to "in_progress" if technician is starting work
+    if active_assignment.status in ["pending", "assigned"]:
+        assignment_repository.update_assignment_status(
+            active_assignment.assignment_id, "in_progress"
+        )
+        logger.info(
+            f"Updated assignment {active_assignment.assignment_id} "
+            f"status to in_progress"
+        )
+
+
+def _process_extracted_data(chat_id: int, extracted_data: dict) -> None:
+    """
+    Update intake record fields with extracted data.
+
+    Args:
+        chat_id: Telegram chat ID
+        extracted_data: Dictionary of extracted field names and values
+    """
+    session = session_service.get_session(chat_id)
+    if not session:
+        return
+
+    for field_name, value in extracted_data.items():
+        # Check if field exists on the intake record instance
+        if hasattr(session["intake_record"], field_name):
+            session_service.update_intake_field(chat_id, field_name, value)
+            logger.debug(f"Updated {field_name}={value} for chat_id={chat_id}")
+
+
+def _complete_intake_with_assignment(
+    chat_id: int, intake_record
+) -> None:
+    """
+    Complete assignment linked to intake record.
+
+    Args:
+        chat_id: Telegram chat ID
+        intake_record: Complete IntakeRecord instance
+    """
+    if not assignment_repository or not intake_record.assignment_id:
+        return
+
+    from datetime import UTC, datetime
+
+    # Generate intake_record_id (in future, this will come from DB persistence)
+    intake_record_id = (
+        f"intake_{chat_id}_{int(datetime.now(UTC).timestamp())}"
+    )
+
+    # Complete the assignment with intake record link
+    updated_assignment = assignment_repository.complete_assignment(
+        intake_record.assignment_id,
+        intake_record_id,
+    )
+    if updated_assignment:
+        logger.info(
+            f"Completed assignment {intake_record.assignment_id} "
+            f"with intake_record_id={intake_record_id}"
+        )
+
+
 @router.post("/webhook")
 async def webhook(update: TelegramUpdate):
     """
@@ -85,24 +172,7 @@ async def webhook(update: TelegramUpdate):
         session = session_service.get_or_create_session(chat_id)
 
         # Link session to active assignment if available (Step 2-3)
-        if assignment_repository and not session["intake_record"].assignment_id:
-            active_assignment = assignment_repository.get_active_assignment_for_technician(chat_id)
-            if active_assignment:
-                # Link intake record to assignment
-                session_service.update_intake_field(
-                    chat_id, "assignment_id", active_assignment.assignment_id
-                )
-                logger.info(f"Linked session to assignment {active_assignment.assignment_id}")
-
-                # Update assignment status to "in_progress" if technician is starting work
-                if active_assignment.status in ["pending", "assigned"]:
-                    assignment_repository.update_assignment_status(
-                        active_assignment.assignment_id, "in_progress"
-                    )
-                    logger.info(
-                        f"Updated assignment {active_assignment.assignment_id} "
-                        f"status to in_progress"
-                    )
+        _link_session_to_assignment(chat_id, session)
 
         # Log message to conversation history
         session_service.add_message(chat_id, message_text)
@@ -114,10 +184,7 @@ async def webhook(update: TelegramUpdate):
             logger.info(f"Extracted {len(extracted_data)} fields from message")
 
             # Update IntakeRecord with extracted data
-            for field_name, value in extracted_data.items():
-                if hasattr(session["intake_record"], field_name):
-                    session_service.update_intake_field(chat_id, field_name, value)
-                    logger.debug(f"Updated {field_name}={value} for chat_id={chat_id}")
+            _process_extracted_data(chat_id, extracted_data)
 
         # Check if record is complete
         intake_record = session["intake_record"]
@@ -128,22 +195,7 @@ async def webhook(update: TelegramUpdate):
             logger.info(f"Intake record complete for chat_id={chat_id}")
 
             # Update linked assignment if exists (Step 2-3)
-            if assignment_repository and intake_record.assignment_id:
-                from datetime import UTC, datetime
-
-                # Generate intake_record_id (in future, this will come from DB persistence)
-                intake_record_id = f"intake_{chat_id}_{int(datetime.now(UTC).timestamp())}"
-
-                # Complete the assignment with intake record link
-                updated_assignment = assignment_repository.complete_assignment(
-                    intake_record.assignment_id,
-                    intake_record_id
-                )
-                if updated_assignment:
-                    logger.info(
-                        f"Completed assignment {intake_record.assignment_id} "
-                        f"with intake_record_id={intake_record_id}"
-                    )
+            _complete_intake_with_assignment(chat_id, intake_record)
 
             # Complete and remove session to prevent reprocessing
             session_service.complete_session(chat_id)

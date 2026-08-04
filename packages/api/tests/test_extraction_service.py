@@ -62,7 +62,10 @@ def extraction_service_malformed():
 
 def test_extract_complete_record(extraction_service_complete):
     """Should extract all fields from comprehensive message."""
-    message = "Hi, this is John Doe. I completed an HVAC repair at 123 Main Street. Replaced air filter, system running normally now."
+    message = (
+        "Hi, this is John Doe. I completed an HVAC repair at 123 Main Street. "
+        "Replaced air filter, system running normally now."
+    )
 
     result = extraction_service_complete.extract_from_message(message)
 
@@ -152,7 +155,7 @@ def test_extract_truncates_long_messages():
 
     # Should still process successfully
     assert "location" in result
-    
+
     # Check that truncated message was passed to provider
     prompt, _ = mock_provider.called_with[0]
     # The prompt includes the message, so check it's not the full 5000 chars
@@ -173,7 +176,10 @@ def test_anthropic_integration():
     provider = AnthropicProvider(api_key)
     service = ExtractionService(provider)
 
-    message = "Hi, I'm Jane Smith. Completed electrical work at 789 Pine Rd. Everything is working perfectly."
+    message = (
+        "Hi, I'm Jane Smith. Completed electrical work at 789 Pine Rd. "
+        "Everything is working perfectly."
+    )
     result = service.extract_from_message(message)
 
     # Real API should extract fields
@@ -231,10 +237,10 @@ def test_extract_with_invalid_field_types():
     service = ExtractionService(mock_provider)
 
     message = "Work done at 123 Main St"
-    
+
     # Should still return data even if validation fails
     result = service.extract_from_message(message)
-    
+
     assert "location" in result
     assert result["location"] == "123 Main St"
 
@@ -263,7 +269,7 @@ def test_llm_provider_factory():
 
     # Test with mock API key to avoid requiring real key
     provider = create_llm_provider("anthropic", api_key="test-key-123")
-    
+
     assert provider is not None
     assert hasattr(provider, "generate")
 
@@ -289,6 +295,6 @@ def test_extraction_service_factory():
     from app.services.llm_factory import create_extraction_service
 
     service = create_extraction_service("anthropic", api_key="test-key-123")
-    
+
     assert service is not None
     assert hasattr(service, "extract_from_message")
