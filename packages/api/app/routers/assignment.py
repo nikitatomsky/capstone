@@ -9,25 +9,41 @@ Provides endpoints for managing assignments and technicians:
 - GET /api/technicians - List all technicians
 """
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.models.assignment import Assignment, AssignmentCreate
 from app.models.technician import Technician, TechnicianCreate
 from app.repositories.assignment_repository import (
     AssignmentRepository,
-    FakeAssignmentRepository,
+    DynamoDBAssignmentRepository,
 )
+from app.services.sse_manager import sse_manager
 
 router = APIRouter(tags=["assignments"])
+logger = logging.getLogger(__name__)
 
 # Dependency injection for repository
-# In production, this would use DynamoDBAssignmentRepository
-# For now, use Fake for testing and local development
-_repository_instance = FakeAssignmentRepository()
+# Using DynamoDB for production-ready persistence
+# Tests continue to use FakeAssignmentRepository for isolation
+_repository_instance: AssignmentRepository | None = None
+
+# Telegram client for sending notifications
+telegram_client = None
+
+
+def init_dependencies(telegram_cl):
+    """Initialize router dependencies (called from main.py)."""
+    global telegram_client
+    telegram_client = telegram_cl
 
 
 def get_assignment_repo() -> AssignmentRepository:
     """Dependency that provides assignment repository."""
+    global _repository_instance
+    if _repository_instance is None:
+        _repository_instance = DynamoDBAssignmentRepository()
     return _repository_instance
 
 
@@ -37,7 +53,7 @@ async def create_assignment(
     repo: AssignmentRepository = Depends(get_assignment_repo)
 ) -> Assignment:
     """
-    Create a new assignment.
+    Create a new assignment and notify the technician via Telegram.
 
     Args:
         assignment_data: Assignment creation data (technician, title, description, priority)
@@ -56,6 +72,46 @@ async def create_assignment(
     )
 
     created_assignment = repo.create_assignment(assignment)
+
+    # Send Telegram notification to technician (Step 2-2)
+    if telegram_client:
+        notification_message = (
+            f"🔔 **New Assignment**\n\n"
+            f"**Title**: {created_assignment.title}\n"
+            f"**Description**: {created_assignment.description}\n"
+            f"**Priority**: {created_assignment.priority}\n\n"
+            f"Please respond when you start working on this task."
+        )
+        try:
+            await telegram_client.send_message(
+                created_assignment.technician_chat_id,
+                notification_message
+            )
+            logger.info(
+                f"Sent assignment notification to chat_id={created_assignment.technician_chat_id} "
+                f"for assignment_id={created_assignment.assignment_id}"
+            )
+        except Exception as e:
+            logger.error(
+                f"Failed to send Telegram notification for assignment "
+                f"{created_assignment.assignment_id}: {e}"
+            )
+            # Don't fail the request if notification fails
+    else:
+        logger.warning("Telegram client not available - notification not sent")
+
+    # Broadcast assignment creation event via SSE (Step 3-0)
+    await sse_manager.broadcast(
+        "assignment_created",
+        {
+            "assignment_id": created_assignment.assignment_id,
+            "status": created_assignment.status,
+            "technician_name": created_assignment.technician_name,
+            "title": created_assignment.title,
+            "priority": created_assignment.priority,
+        }
+    )
+
     return created_assignment
 
 

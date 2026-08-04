@@ -6,25 +6,50 @@ import os
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 
 # Load environment variables from .env file
+# Must be called before importing app modules that depend on env vars
 load_dotenv()
 
-from app import handlers
-from app.constants import MAX_LOG_MESSAGE_LENGTH
-from app.exceptions import MissingMessageError, MissingTextError, WebhookError
-from app.routers import assignment, health, webhook
-from app.services.extraction_service import ExtractionService
-from app.services.intake_helpers import generate_followup_question, get_missing_fields
-from app.services.llm_providers import AnthropicProvider
-from app.services.session_service import SessionService
-from app.services.telegram_client import TelegramClient
+# noqa: E402 - imports after load_dotenv() to ensure env vars are available
+from app import handlers  # noqa: E402
+from app.constants import MAX_LOG_MESSAGE_LENGTH  # noqa: E402
+from app.exceptions import (  # noqa: E402
+    MissingMessageError,
+    MissingTextError,
+    WebhookError,
+)
+from app.routers import assignment, health, sse, webhook  # noqa: E402
+from app.services.extraction_service import ExtractionService  # noqa: E402
+from app.services.intake_helpers import (  # noqa: E402
+    generate_followup_question,
+    get_missing_fields,
+)
+from app.services.llm_providers import AnthropicProvider  # noqa: E402
+from app.services.session_service import SessionService  # noqa: E402
+from app.services.telegram_client import TelegramClient  # noqa: E402
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Field Intake Service")
+
+# CORS middleware for SPA integration
+# Allows cross-origin requests from React frontend
+# Local dev: localhost:5173 (Vite default), localhost:3000 (alternative React port)
+# Production: CloudFront domain (update when deployed)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",  # Vite dev server
+        "http://localhost:3000",  # Alternative React dev port
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Create singleton SessionService instance
 session_service = SessionService()
@@ -70,6 +95,11 @@ def _truncate_for_log(text: str | None, max_length: int = MAX_LOG_MESSAGE_LENGTH
 
 
 # Initialize webhook router with dependencies
+# Import after app initialization to avoid circular dependency
+from app.routers.assignment import (  # noqa: E402
+    _repository_instance as assignment_repo,
+)
+
 webhook.init_dependencies(
     session_service,
     extraction_service,
@@ -77,12 +107,19 @@ webhook.init_dependencies(
     _truncate_for_log,
     get_missing_fields,
     generate_followup_question,
+    assignment_repo,  # Pass the assignment repository
 )
 
 # Initialize health router with dependencies
 health.init_dependencies(session_service)
 
+# Initialize assignment router with dependencies
+assignment.init_dependencies(telegram_client)
+
 # Include routers
+# IMPORTANT: Register SSE router before assignment router
+# to prevent /api/assignments/stream from matching /api/assignments/{assignment_id}
 app.include_router(health.router)
 app.include_router(webhook.router)
+app.include_router(sse.router)  # Register BEFORE assignment router
 app.include_router(assignment.router)
