@@ -87,6 +87,19 @@ class TechnicianRepository(ABC):
             Technician or None if not found
         """
 
+    @abstractmethod
+    def update_technician_chat_id(self, technician_id: str, chat_id: int) -> bool:
+        """
+        Update technician's Telegram chat_id (for invitation linking).
+
+        Args:
+            technician_id: UUID of the technician
+            chat_id: Telegram chat_id to link
+
+        Returns:
+            True if updated, False if technician not found
+        """
+
 
 class DynamoDBTechnicianRepository(TechnicianRepository):
     """
@@ -206,6 +219,22 @@ class DynamoDBTechnicianRepository(TechnicianRepository):
         except ClientError:
             return None
 
+    def update_technician_chat_id(self, technician_id: str, chat_id: int) -> bool:
+        """Update chat_id in DynamoDB."""
+        try:
+            self.technicians_table.update_item(
+                Key={'technician_id': technician_id},
+                UpdateExpression='SET chat_id = :chat_id',
+                ExpressionAttributeValues={':chat_id': chat_id},
+                ConditionExpression='attribute_exists(technician_id)'
+            )
+            return True
+        except self.dynamodb.meta.client.exceptions.ConditionalCheckFailedException:
+            # Technician not found
+            return False
+        except ClientError:
+            return False
+
     def _has_active_assignments(self, technician_id: str) -> bool:
         """Check if technician has active assignments."""
         try:
@@ -273,6 +302,23 @@ class FakeTechnicianRepository(TechnicianRepository):
             if technician.chat_id == chat_id:
                 return technician
         return None
+
+    def update_technician_chat_id(self, technician_id: str, chat_id: int) -> bool:
+        """Update technician's chat_id."""
+        if technician_id not in self.technicians:
+            return False
+
+        technician = self.technicians[technician_id]
+        # Create updated technician with new chat_id
+        updated_technician = Technician(
+            technician_id=technician.technician_id,
+            name=technician.name,
+            phone_number=technician.phone_number,
+            chat_id=chat_id,  # Update chat_id
+            registered_at=technician.registered_at
+        )
+        self.technicians[technician_id] = updated_technician
+        return True
 
     def _has_active_assignments(self, technician_id: str) -> bool:
         """Check if technician has active assignments."""

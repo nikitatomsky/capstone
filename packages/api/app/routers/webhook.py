@@ -16,6 +16,7 @@ extraction_service = None
 telegram_client = None
 assignment_repository = None
 technician_repository = None
+invitation_service = None  # NEW: For Telegram invitation token validation
 
 # Helper functions - will be injected from main.py
 _truncate_for_log = None
@@ -32,6 +33,7 @@ def init_dependencies(
     generate_followup_fn,
     assignment_repo=None,
     technician_repo=None,
+    invitation_svc=None,  # NEW: Invitation service
 ):
     """
     Initialize router dependencies.
@@ -41,12 +43,14 @@ def init_dependencies(
     global session_service, extraction_service, telegram_client
     global assignment_repository, technician_repository
     global _truncate_for_log, get_missing_fields, generate_followup_question
+    global invitation_service  # NEW
 
     session_service = session_svc
     extraction_service = extraction_svc
     telegram_client = telegram_cl
     assignment_repository = assignment_repo
     technician_repository = technician_repo
+    invitation_service = invitation_svc  # NEW
     _truncate_for_log = truncate_fn
     get_missing_fields = get_missing_fn
     generate_followup_question = generate_followup_fn
@@ -156,6 +160,82 @@ def _complete_intake_with_assignment(
         )
 
 
+async def _handle_start_command(chat_id: int, message_text: str) -> None:
+    """
+    Handle /start command with optional invitation token.
+
+    This function processes Telegram /start commands for the invitation flow.
+    When a technician taps an invitation deeplink, Telegram sends a /start command
+    with the token as a parameter. This function validates the token and links
+    the chat_id to the technician's record.
+
+    Args:
+        chat_id: Telegram chat ID from the user who sent /start
+        message_text: Full message text (e.g., "/start abc123xyz" or just "/start")
+    """
+    # Extract token from command (if present)
+    parts = message_text.split(maxsplit=1)
+
+    if len(parts) == 1:
+        # Just "/start" without token - send welcome message
+        await telegram_client.send_message(
+            chat_id,
+            "Welcome! If you have an invitation link, please tap it to connect your account."
+        )
+        return
+
+    token = parts[1]
+
+    # Validate invitation service is available
+    if not invitation_service or not technician_repository:
+        logger.error("Invitation service not configured")
+        await telegram_client.send_message(
+            chat_id,
+            "Service temporarily unavailable. Please try again later."
+        )
+        return
+
+    # Validate token
+    technician_id = invitation_service.validate_token(token)
+
+    if not technician_id:
+        # Token invalid, expired, or already used
+        await telegram_client.send_message(
+            chat_id,
+            "This invitation link is invalid, expired, or has already been used. "
+            "Please contact your administrator for a new invitation."
+        )
+        return
+
+    # Link chat_id to technician
+    success = technician_repository.update_technician_chat_id(
+        technician_id, chat_id
+    )
+
+    if not success:
+        logger.error(f"Failed to update chat_id for technician {technician_id}")
+        await telegram_client.send_message(
+            chat_id,
+            "Failed to connect your account. Please contact your administrator."
+        )
+        return
+
+    # Get technician details for personalized message
+    technician = technician_repository.get_technician(technician_id)
+    name = technician.name if technician else "there"
+
+    # Send success confirmation
+    await telegram_client.send_message(
+        chat_id,
+        f"✅ Hi {name}! Your Telegram account is now connected. "
+        f"You'll receive assignment notifications here."
+    )
+
+    logger.info(
+        f"Successfully linked chat_id {chat_id} to technician {technician_id}"
+    )
+
+
 @router.post("/webhook")
 async def webhook(update: TelegramUpdate):
     """
@@ -188,6 +268,11 @@ async def webhook(update: TelegramUpdate):
             f"Processing message from chat {chat_id}: "
             f"{_truncate_for_log(message_text)}"
         )
+
+        # NEW: Handle /start command for invitation flow (early return)
+        if message_text and message_text.startswith("/start"):
+            await _handle_start_command(chat_id, message_text)
+            return {"status": "ok", "message": "Start command processed"}
 
         # Get or create session for this chat
         session = session_service.get_or_create_session(chat_id)

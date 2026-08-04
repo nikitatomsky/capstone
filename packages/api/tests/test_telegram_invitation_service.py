@@ -1,6 +1,6 @@
 """Tests for TelegramInvitationService."""
 import hashlib
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import Mock
 
 import pytest
@@ -59,9 +59,9 @@ def test_generate_invitation_sets_expiration(service, mock_repo):
     """Test that invitation has correct expiration."""
     mock_repo.create_invitation.return_value = None
 
-    before = datetime.now()
+    before = datetime.now(UTC)
     invitation = service.generate_invitation(technician_id="tech-123")
-    after = datetime.now()
+    after = datetime.now(UTC)
 
     # Expiration should be ~1 hour from now (3600 seconds)
     expected_expiry = before + timedelta(seconds=3600)
@@ -96,8 +96,8 @@ def test_validate_token_with_valid_token(service, mock_repo):
         token_hash=token_hash,
         technician_id="tech-123",
         telegram_link="https://t.me/bot?start=" + token,
-        expires_at=datetime.now() + timedelta(hours=1),
-        created_at=datetime.now(),
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
+        created_at=datetime.now(UTC),
         used_at=None,
     )
     mock_repo.mark_invitation_used.return_value = True
@@ -119,8 +119,8 @@ def test_validate_token_with_expired_token(service, mock_repo):
         token_hash=token_hash,
         technician_id="tech-123",
         telegram_link="https://t.me/bot?start=" + token,
-        expires_at=datetime.now() - timedelta(hours=1),  # Expired
-        created_at=datetime.now() - timedelta(hours=2),
+        expires_at=datetime.now(UTC) - timedelta(hours=1),  # Expired
+        created_at=datetime.now(UTC) - timedelta(hours=2),
         used_at=None,
     )
 
@@ -140,9 +140,9 @@ def test_validate_token_with_already_used_token(service, mock_repo):
         token_hash=token_hash,
         technician_id="tech-123",
         telegram_link="https://t.me/bot?start=" + token,
-        expires_at=datetime.now() + timedelta(hours=1),
-        created_at=datetime.now(),
-        used_at=datetime.now() - timedelta(minutes=5),  # Already used
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
+        created_at=datetime.now(UTC),
+        used_at=datetime.now(UTC) - timedelta(minutes=5),  # Already used
     )
 
     technician_id = service.validate_token(token)

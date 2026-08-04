@@ -4,6 +4,71 @@ Development session history for the Field Intake Service.
 
 ---
 
+## 2026-08-04 - Step 4-2: Extend Webhook for Telegram Invitation Tokens
+
+**Focus**: Implement `/start` command handling for automated chat ID linking via invitation tokens
+
+**Accomplishments**:
+- **TDD Workflow**: Followed strict RED-GREEN-REFACTOR cycle
+  - RED: Wrote 6 comprehensive tests for `/start` command scenarios
+  - GREEN: Implemented minimal webhook changes to make tests pass
+  - REFACTOR: Enhanced error messages and added edge case handling
+- **Webhook Extension**: Added `/start` command detection and early routing
+  - Created `_handle_start_command()` function for token validation flow
+  - Integrated TelegramInvitationService for token validation
+  - Linked chat_id to technician records via TechnicianRepository
+  - Preserved existing webhook functionality (service reports still work)
+- **Repository Enhancement**: Added `update_technician_chat_id()` method
+  - Implemented in abstract TechnicianRepository interface
+  - Added to DynamoDBTechnicianRepository (production)
+  - Added to FakeTechnicianRepository (testing)
+- **Dependency Injection**: Extended main.py to inject invitation service
+  - Created TelegramInvitationService instance with configurable TTL
+  - Injected into webhook router via `init_dependencies()`
+  - Used environment variables for bot username and TTL configuration
+- **Bug Fixes**: Fixed timezone-aware datetime comparisons
+  - Updated `generate_invitation()` to use `datetime.now(UTC)`
+  - Updated `validate_token()` to use `datetime.now(UTC)`
+  - Fixed all invitation service tests to use UTC datetimes
+- **Test Coverage**: All 149 tests passing (27 webhook tests, 10 invitation tests, 112 other tests)
+
+**Key Decisions**:
+- Early return pattern for `/start` commands prevents session creation
+- Specific error messages improve UX (expired vs. used vs. invalid)
+- Idempotency: duplicate linking attempts send appropriate messages
+- Security logging without exposing sensitive token data
+- Backward compatibility: existing service report flow unchanged
+
+**Patterns Discovered**:
+- **Early Return Pattern**: Check for special cases (`/start`) at webhook entry point
+- **Mock Async Functions**: Use `AsyncMock` instead of `Mock` for async `send_message()`
+- **Timezone-Aware Datetimes**: Always use `datetime.now(UTC)` for comparisons
+- **Repository Method Addition**: Add abstract method + DynamoDB + Fake implementations together
+- **Test-First Development**: Write tests with proper mocks BEFORE implementation
+
+**Technical Details**:
+- `/start` command without token → Welcome message
+- `/start <valid_token>` → Link chat_id, send confirmation with technician name
+- `/start <expired_token>` → Error message (invitation expired)
+- `/start <used_token>` → Error message (already used)
+- `/start <invalid_token>` → Error message (invalid invitation)
+- Regular messages → Existing extraction flow (unchanged)
+
+**What's Next**:
+- Step 4-3: Add API endpoint to create invitations and send SMS deeplinks
+- Manual testing: Generate invitation link and test in Telegram
+- Integration with frontend UI for admin invitation workflow
+
+**Files Modified**:
+- `app/routers/webhook.py`: Added `_handle_start_command()`, early `/start` detection
+- `app/main.py`: Injected TelegramInvitationService into webhook
+- `app/repositories/technician_repository.py`: Added `update_technician_chat_id()` method
+- `app/services/telegram_invitation_service.py`: Fixed timezone-aware datetime usage
+- `tests/test_webhook.py`: Added 6 comprehensive `/start` command tests
+- `tests/test_telegram_invitation_service.py`: Fixed timezone issues in existing tests
+
+---
+
 ## 2026-08-02 - Project Scaffold Creation
 
 **Focus**: Initialize golden-path project template from project overview

@@ -20,6 +20,9 @@ from app.exceptions import (  # noqa: E402
     MissingTextError,
     WebhookError,
 )
+from app.repositories.telegram_invitation_repository import (  # noqa: E402
+    TelegramInvitationRepository,
+)
 from app.routers import assignment, health, sse, technician, webhook  # noqa: E402
 from app.services.extraction_service import ExtractionService  # noqa: E402
 from app.services.intake_helpers import (  # noqa: E402
@@ -29,6 +32,7 @@ from app.services.intake_helpers import (  # noqa: E402
 from app.services.llm_providers import AnthropicProvider  # noqa: E402
 from app.services.session_service import SessionService  # noqa: E402
 from app.services.telegram_client import TelegramClient  # noqa: E402
+from app.services.telegram_invitation_service import TelegramInvitationService  # noqa: E402
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -68,6 +72,17 @@ else:
     extraction_service = None
     logger.warning("ANTHROPIC_API_KEY not set - extraction disabled")
 
+# Initialize Telegram invitation service (Step 4-2)
+invitation_repo = TelegramInvitationRepository()
+TELEGRAM_BOT_USERNAME = os.getenv("TELEGRAM_BOT_USERNAME", "field_intake_bot")
+TELEGRAM_INVITATION_TTL = int(os.getenv("TELEGRAM_INVITATION_TTL_SECONDS", "3600"))
+invitation_service = TelegramInvitationService(
+    repository=invitation_repo,
+    bot_username=TELEGRAM_BOT_USERNAME,
+    ttl_seconds=TELEGRAM_INVITATION_TTL,
+)
+logger.info(f"Invitation service initialized (TTL: {TELEGRAM_INVITATION_TTL}s)")
+
 
 # Register exception handlers
 app.add_exception_handler(RequestValidationError, handlers.validation_exception_handler)
@@ -99,6 +114,9 @@ def _truncate_for_log(text: str | None, max_length: int = MAX_LOG_MESSAGE_LENGTH
 from app.routers.assignment import (  # noqa: E402
     _repository_instance as assignment_repo,
 )
+from app.routers.technician import (  # noqa: E402
+    _technician_repository as technician_repo,
+)
 
 webhook.init_dependencies(
     session_service,
@@ -108,6 +126,8 @@ webhook.init_dependencies(
     get_missing_fields,
     generate_followup_question,
     assignment_repo,  # Pass the assignment repository
+    technician_repo,  # Pass the technician repository (Step 2-3)
+    invitation_service,  # NEW: Pass the invitation service (Step 4-2)
 )
 
 # Initialize health router with dependencies
