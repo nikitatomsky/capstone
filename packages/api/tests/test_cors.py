@@ -50,6 +50,31 @@ def test_cors_headers_present_on_health_check():
     assert "access-control-allow-origin" in response.headers
 
 
+def test_cors_allows_frontend_on_port_5174():
+    """Test CORS headers work for frontend running on port 5174."""
+    response = client.get(
+        "/api/assignments",
+        headers={"Origin": "http://localhost:5174"},
+    )
+    assert response.status_code == 200
+    assert "access-control-allow-origin" in response.headers
+    assert response.headers["access-control-allow-origin"] == "http://localhost:5174"
+
+
+def test_cors_preflight_for_port_5174():
+    """Test CORS preflight works for port 5174."""
+    response = client.options(
+        "/api/assignments",
+        headers={
+            "Origin": "http://localhost:5174",
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://localhost:5174"
+
+
 def test_cors_allows_alternative_react_port():
     """Test CORS allows requests from alternative React dev port (3000)."""
     response = client.get(

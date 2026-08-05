@@ -25,7 +25,7 @@ export default function CreateTechnicianForm() {
     // Validate
     const newErrors: Record<string, string> = {};
     if (!formData.name.trim()) newErrors.name = 'Name is required';
-    if (!formData.phone_number.trim()) newErrors.phone_number = 'Phone number is required';
+    if (!formData.email.trim()) newErrors.email = 'Email is required';
     
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -91,7 +91,7 @@ export default function CreateTechnicianForm() {
             {errors.name && <span className="form-hint" style={{ color: 'var(--color-danger)' }}>{errors.name}</span>}
           </div>
 
-                    <div className="form-group">
+          <div className="form-group">
             <label htmlFor="email" className="form-label">
               Email <span style={{ color: 'var(--color-danger)' }}>*</span>
             </label>
@@ -107,6 +107,8 @@ export default function CreateTechnicianForm() {
             <span className="form-hint">
               Required for completing onboarding. 
             </span>
+            {errors.email && <span className="form-hint" style={{ color: 'var(--color-danger)' }}>{errors.email}</span>}
+
           </div>
 
           <div className="form-group">

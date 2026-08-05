@@ -46,11 +46,11 @@ def generate_followup_question(missing_fields: list[str]) -> str:
         ),
         "service_type": (
             "What type of service did you perform? "
-            "(e.g., HVAC, Plumbing, Electrical)"
-        ),
+            "(Delivery or Pickup)"
+        ), 
         "outcome": (
             "What was the outcome of the service call? "
-            "(e.g., completed, needs_followup, escalated)"
+            "(e.g., completed, cancelled, escalated)"
         ),
     }
 

@@ -26,7 +26,7 @@ class IntakeRecord(BaseModel):
     )
     service_type: str | None = Field(
         default=None,
-        description="Type of service performed (e.g., HVAC Repair, Plumbing, Electrical)",
+        description="Type of service performed (e.g., Delivery, Pickup, Fire Drill)",
     )
     outcome: str | None = Field(
         default=None,

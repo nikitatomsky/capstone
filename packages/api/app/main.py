@@ -42,12 +42,13 @@ app = FastAPI(title="Field Intake Service")
 
 # CORS middleware for SPA integration
 # Allows cross-origin requests from React frontend
-# Local dev: localhost:5173 (Vite default), localhost:3000 (alternative React port)
+# Local dev: localhost:5173-5174 (Vite dev server), localhost:3000 (alternative React port)
 # Production: CloudFront domain (update when deployed)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:5173",  # Vite dev server
+        "http://localhost:5173",  # Vite dev server (default)
+        "http://localhost:5174",  # Vite dev server (alternate port)
         "http://localhost:3000",  # Alternative React dev port
     ],
     allow_credentials=True,
