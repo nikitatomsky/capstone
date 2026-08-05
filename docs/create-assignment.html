@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Create new field service assignment">
+    <title>Create Assignment - Field Intake Service</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Skip to main content link for accessibility -->
+    <a href="#main" class="skip-link">Skip to main content</a>
+
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <div class="header__content">
+                <h1 class="header__title">Field Intake Service</h1>
+                <nav class="header__nav" aria-label="Main navigation">
+                    <ul role="list">
+                        <li><a href="dashboard.html">Dashboard</a></li>
+                        <li><a href="#technicians">Technicians</a></li>
+                        <li><a href="#settings">Settings</a></li>
+                    </ul>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main id="main" class="main">
+        <div class="container container--narrow">
+            <!-- Page Header -->
+            <div class="page-header">
+                <div class="page-header__content">
+                    <a href="dashboard.html" class="back-link">← Back to Dashboard</a>
+                    <h2 class="page-header__title">Create New Assignment</h2>
+                    <p class="page-header__subtitle">Assign a new field service task to a technician</p>
+                </div>
+            </div>
+
+            <!-- Assignment Form -->
+            <form class="form" action="/api/assignments" method="POST">
+                <fieldset class="form__section">
+                    <legend class="form__legend">Assignment Details</legend>
+
+                    <div class="form-group">
+                        <label for="title" class="form-label">
+                            Title
+                            <span class="form-label__required" aria-label="required">*</span>
+                        </label>
+                        <input 
+                            type="text" 
+                            id="title" 
+                            name="title" 
+                            class="form-input"
+                            aria-required="true"
+                            aria-describedby="title-hint"
+                            placeholder="Brief description of the task"
+                            required
+                        >
+                        <span id="title-hint" class="form-hint">
+                            Keep it concise - this appears in notifications
+                        </span>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="description" class="form-label">
+                            Description
+                            <span class="form-label__required" aria-label="required">*</span>
+                        </label>
+                        <textarea 
+                            id="description" 
+                            name="description" 
+                            class="form-textarea"
+                            aria-required="true"
+                            aria-describedby="description-hint"
+                            rows="5"
+                            placeholder="Detailed description of the work to be performed..."
+                            required
+                        ></textarea>
+                        <span id="description-hint" class="form-hint">
+                            Include location, scope of work, and any special requirements
+                        </span>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="priority" class="form-label">
+                            Priority
+                            <span class="form-label__required" aria-label="required">*</span>
+                        </label>
+                        <select 
+                            id="priority" 
+                            name="priority" 
+                            class="form-select"
+                            aria-required="true"
+                            required
+                        >
+                            <option value="">Select priority level...</option>
+                            <option value="urgent">🔴 Urgent - Immediate attention required</option>
+                            <option value="high">🟠 High - Complete within 24 hours</option>
+                            <option value="medium" selected>🟡 Medium - Complete within 3 days</option>
+                            <option value="low">🟢 Low - Complete when available</option>
+                        </select>
+                    </div>
+                </fieldset>
+
+                <fieldset class="form__section">
+                    <legend class="form__legend">Technician Assignment</legend>
+
+                    <div class="form-group">
+                        <label for="technician" class="form-label">
+                            Assign to Technician
+                            <span class="form-label__required" aria-label="required">*</span>
+                        </label>
+                        <select 
+                            id="technician" 
+                            name="technician_chat_id" 
+                            class="form-select"
+                            aria-required="true"
+                            aria-describedby="technician-hint"
+                            required
+                        >
+                            <option value="">Select a technician...</option>
+                            <optgroup label="Available Technicians">
+                                <option value="12345678">John Davis - HVAC Specialist</option>
+                                <option value="23456789">Sarah Martinez - Electrical</option>
+                                <option value="34567890">Michael Rodriguez - Plumbing</option>
+                                <option value="45678901">Emily Chen - General Maintenance</option>
+                            </optgroup>
+                            <optgroup label="Currently Assigned">
+                                <option value="56789012" disabled>David Kim - 2 active assignments</option>
+                            </optgroup>
+                        </select>
+                        <span id="technician-hint" class="form-hint">
+                            Technician will receive a Telegram notification immediately
+                        </span>
+                    </div>
+                </fieldset>
+
+                <!-- Form Actions -->
+                <div class="form-actions">
+                    <button type="submit" class="btn btn--primary">
+                        Create Assignment
+                    </button>
+                    <a href="dashboard.html" class="btn btn--secondary">
+                        Cancel
+                    </a>
+                </div>
+            </form>
+
+            <!-- Info Box -->
+            <aside class="info-box">
+                <h3 class="info-box__title">What happens next?</h3>
+                <ol class="info-box__list">
+                    <li>Assignment is created and stored in the system</li>
+                    <li>Technician receives a Telegram notification with assignment details</li>
+                    <li>You'll see real-time status updates on the dashboard</li>
+                    <li>When complete, the technician's intake report will be linked to this assignment</li>
+                </ol>
+            </aside>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p class="footer__text">
+                Field Intake Service • 
+                <span id="connection-status" class="status-indicator status-indicator--connected">Connected</span>
+            </p>
+        </div>
+    </footer>
+</body>
+</html>

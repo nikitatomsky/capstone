@@ -48,6 +48,90 @@ Development session history for the Field Intake Service.
 - Backward compatible default (SMS) for existing clients
 - Repository pattern updated to support email field
 
+---
+
+## 2026-08-04: Step 3-2 - Polish React UI with Professional Styling and Two-Step Invitation Flow (Issue #41)
+
+**Focus**: Transform React SPA from functional prototype to production-ready admin dashboard
+
+**Accomplished**:
+- ✅ Copied professional CSS from `docs/styles.css` to `packages/frontend/src/styles.css`
+- ✅ Imported global styles in `main.tsx` before App import
+- ✅ Updated `App.tsx` with semantic HTML structure (header, nav with proper CSS classes)
+- ✅ Added `sendTechnicianInvitation` API method with delivery method support (email/SMS)
+- ✅ Updated TypeScript types: added `email` and `invitation_status` to `Technician` interface
+- ✅ Created `TelegramInvitationResponse` type for API responses
+- ✅ Implemented two-step technician workflow in `TechnicianList`:
+  - Technicians show status badges (Pending, Invitation Sent, Connected)
+  - "Invite to Chat" button for pending technicians
+  - "Resend Invitation" button for sent invitations
+  - Loading states per technician (prevents double-submission)
+  - Success/error notifications with auto-dismiss
+- ✅ Updated `CreateTechnicianForm`:
+  - Added email field for invitation delivery
+  - Applied CSS classes from design system
+  - Added form validation with error messages
+  - No auto-invitation (manual two-step flow)
+- ✅ Polished `AssignmentList`:
+  - Professional card-based layout with badges
+  - Status and priority badges with proper CSS classes
+  - Tech avatars showing initials
+  - Loading and error states
+  - Empty state with CTA
+- ✅ Polished `CreateAssignmentForm`:
+  - Applied CSS classes throughout
+  - Added form validation with field-level error messages
+  - Loading states during submission
+  - Professional form layout
+
+**Code Quality Validation**:
+- ✅ Zero lint errors: `npm run lint` passed (0 warnings, 0 errors)
+- ✅ Zero TypeScript errors: `npm run build` succeeded
+- ✅ No VSCode errors in frontend directory
+- ✅ Build completed successfully (248.92 kB gzipped)
+
+**Key Decisions**:
+- Separated technician registration from invitation (better UX and control)
+- Used existing CSS design system wholesale (no custom redesign)
+- Kept state management simple with `useState` (no Redux/Context yet)
+- Added invitation status tracking (pending → sent → connected)
+- Implemented inline notifications (no separate Notification component needed)
+- Derived invitation status from `chat_id` (connected if present, else pending/sent)
+- Support both email and SMS delivery methods (email preferred if available)
+
+**Patterns Discovered**:
+- **Loading State Pattern**: Track loading per action (`loadingTechId`) not globally, prevents UI conflicts
+- **Two-Step Workflow Pattern**: Separate data creation from action triggers for better control
+- **Notification Pattern**: Auto-dismiss after 5 seconds, closeable by user, fixed position
+- **CSS Class Pattern**: Semantic HTML + utility classes from design system (no inline styles)
+- **Validation Pattern**: Field-level error messages with visual feedback, validate before submission
+- **Status Badge Pattern**: Visual indicators for state (pending, sent, connected) with CSS classes
+
+**Technical Implementation Details**:
+- API endpoint: `POST /api/technicians/{technician_id}/telegram-invitation?delivery_method=email|sms`
+- Response includes: success, delivery_method, destination, invitation_link, expires_at
+- Frontend automatically chooses email if available, falls back to SMS
+- Status tracking: `invitation_status` field added to Technician type (pending | sent | connected)
+- Real-time SSE updates still working for assignments (preserved existing functionality)
+
+**What's Next**:
+- Manual testing with local stack (backend + frontend + ngrok)
+- Test complete user journeys:
+  1. Create technician → Send invitation → Verify delivery
+  2. Create assignment → Verify SSE updates → Check detail view
+  3. Test responsive design on mobile/tablet viewports
+- Consider: Add filters to assignment dashboard
+- Consider: Add assignment detail view with full history
+- Future: Add automated E2E tests with Playwright (Step 5-0)
+
+**Branch**: feature/polish-react-ui
+
+**Related Issues**: 
+- Implements GitHub Issue #41 (Step 3-2)
+- Builds on Issue #30 (Technician CRUD)
+- Integrates with Issue #37 (Telegram Invitations)
+- Uses Issue #39 (Email Delivery) infrastructure
+
 **Patterns Discovered**:
 - **Delivery Abstraction Pattern**: Combine generation + delivery in one service
   ```python

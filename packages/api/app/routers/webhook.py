@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.exceptions import MissingMessageError, MissingTextError, WebhookError
 from app.models.telegram import TelegramUpdate
+from app.services.sse_manager import sse_manager
 
 router = APIRouter(tags=["webhook"])
 logger = logging.getLogger(__name__)
@@ -64,30 +65,38 @@ def _link_session_to_assignment(chat_id: int, session: dict) -> None:
         chat_id: Telegram chat ID
         session: Session dictionary containing intake record
     """
-    logger.debug(
-        f"_link_session_to_assignment called: assignment_repo={assignment_repository is not None}, "
+    logger.info(
+        f"Attempting to link session for chat_id={chat_id}: "
+        f"assignment_repo={assignment_repository is not None}, "
         f"technician_repo={technician_repository is not None}, "
-        f"assignment_id={session['intake_record'].assignment_id}"
+        f"current_assignment_id={session['intake_record'].assignment_id}"
     )
+
     if (not assignment_repository or not technician_repository
             or session["intake_record"].assignment_id):
-        logger.debug("Early return from _link_session_to_assignment")
+        logger.info(
+            f"Early return from _link_session_to_assignment: "
+            f"repos_available="
+            f"{assignment_repository is not None and technician_repository is not None}, "
+            f"already_linked={session['intake_record'].assignment_id is not None}"
+        )
         return
 
     # Look up technician by chat_id to get technician_id
     technician = technician_repository.get_technician_by_chat_id(chat_id)
-    logger.debug(f"Looked up technician for chat_id={chat_id}: {technician}")
+    logger.info(f"Looked up technician for chat_id={chat_id}: {technician}")
     if not technician:
-        logger.debug(f"No technician found for chat_id={chat_id}")
+        logger.warning(f"No technician found for chat_id={chat_id}")
         return
 
     # Find active assignment for this technician
-    logger.debug(f"Looking up active assignment for technician_id={technician.technician_id}")
+    logger.info(f"Looking up active assignment for technician_id={technician.technician_id}")
     active_assignment = (
         assignment_repository.get_active_assignment_by_technician_id(technician.technician_id)
     )
-    logger.debug(f"Active assignment found: {active_assignment}")
+    logger.info(f"Active assignment lookup result: {active_assignment}")
     if not active_assignment:
+        logger.warning(f"No active assignment found for technician {technician.technician_id}")
         return
 
     # Link intake record to assignment
@@ -128,7 +137,7 @@ def _process_extracted_data(chat_id: int, extracted_data: dict) -> None:
             logger.debug(f"Updated {field_name}={value} for chat_id={chat_id}")
 
 
-def _complete_intake_with_assignment(
+async def _complete_intake_with_assignment(
     chat_id: int, intake_record
 ) -> None:
     """
@@ -138,7 +147,18 @@ def _complete_intake_with_assignment(
         chat_id: Telegram chat ID
         intake_record: Complete IntakeRecord instance
     """
+    logger.info(
+        f"Attempting to complete assignment: "
+        f"assignment_repo={assignment_repository is not None}, "
+        f"intake_record.assignment_id={intake_record.assignment_id}"
+    )
+
     if not assignment_repository or not intake_record.assignment_id:
+        logger.warning(
+            f"Cannot complete assignment: "
+            f"repo_available={assignment_repository is not None}, "
+            f"assignment_id={intake_record.assignment_id}"
+        )
         return
 
     from datetime import UTC, datetime
@@ -157,6 +177,30 @@ def _complete_intake_with_assignment(
         logger.info(
             f"Completed assignment {intake_record.assignment_id} "
             f"with intake_record_id={intake_record_id}"
+        )
+
+        # Broadcast assignment completion event via SSE
+        await sse_manager.broadcast(
+            "assignment_update",
+            {
+                "assignment_id": updated_assignment.assignment_id,
+                "status": updated_assignment.status,
+                "technician_name": updated_assignment.technician_name,
+                "title": updated_assignment.title,
+                "priority": updated_assignment.priority,
+                "intake_record_id": updated_assignment.intake_record_id,
+                "completed_at": (
+                    updated_assignment.completed_at.isoformat()
+                    if updated_assignment.completed_at else None
+                ),
+            }
+        )
+        logger.info(
+            f"Broadcasted assignment completion event for {updated_assignment.assignment_id}"
+        )
+    else:
+        logger.error(
+            f"Failed to complete assignment {intake_record.assignment_id} in database"
         )
 
 
@@ -301,7 +345,7 @@ async def webhook(update: TelegramUpdate):
             logger.info(f"Intake record complete for chat_id={chat_id}")
 
             # Update linked assignment if exists (Step 2-3)
-            _complete_intake_with_assignment(chat_id, intake_record)
+            await _complete_intake_with_assignment(chat_id, intake_record)
 
             # Complete and remove session to prevent reprocessing
             session_service.complete_session(chat_id)

@@ -54,7 +54,7 @@ def get_technician_repo() -> TechnicianRepository:
 def set_invitation_service(service: TelegramInvitationService) -> None:
     """
     Set the shared invitation service instance (called from main.py).
-    
+
     Args:
         service: Shared TelegramInvitationService instance
     """
@@ -231,7 +231,7 @@ async def delete_technician(
 )
 async def create_telegram_invitation(
     technician_id: str,
-    delivery_method: str = "email",  # Issue #39: Support multiple delivery methods (defaults to email with SES)
+    delivery_method: str = "email",  # Issue #39: Multiple delivery methods
     repo: TechnicianRepository = Depends(get_technician_repo),
     invitation_service: TelegramInvitationService = Depends(get_invitation_service),
     sms_service: SMSService = Depends(get_sms_service),
@@ -254,7 +254,7 @@ async def create_telegram_invitation(
     Raises:
         404: Technician not found
         400: Invalid delivery method or missing required field (phone/email)
-    
+
     Note:
         - Email delivery uses AWS SES (production) or logs only (local dev)
         - SMS delivery uses AWS SNS (production) or FakeSMSService (local dev)

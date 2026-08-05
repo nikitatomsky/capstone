@@ -936,7 +936,11 @@ def test_webhook_handles_start_command_with_used_token(client, monkeypatch):
     mock_send.assert_called_once()
     call_args = mock_send.call_args
     message_text = call_args[0][1]
-    assert "invalid" in message_text.lower() or "used" in message_text.lower() or "expired" in message_text.lower()
+    assert (
+        "invalid" in message_text.lower() or
+        "used" in message_text.lower() or
+        "expired" in message_text.lower()
+    )
 
 
 def test_webhook_handles_start_command_with_invalid_token(client, monkeypatch):

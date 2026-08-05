@@ -1,5 +1,5 @@
 """Tests for TelegramInvitationRepository."""
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -19,9 +19,9 @@ def test_create_invitation(repo):
         token_hash="a" * 64,
         technician_id="tech-123",
         telegram_link="https://t.me/bot?start=abc",
-        expires_at=datetime.now() + timedelta(hours=1),
-        created_at=datetime.now(),
-        expires_at_ttl=int((datetime.now() + timedelta(hours=1)).timestamp()),
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
+        created_at=datetime.now(UTC),
+        expires_at_ttl=int((datetime.now(UTC) + timedelta(hours=1)).timestamp()),
     )
 
     repo.create_invitation(invitation)
@@ -45,9 +45,9 @@ def test_mark_invitation_used(repo):
         token_hash="b" * 64,
         technician_id="tech-456",
         telegram_link="https://t.me/bot?start=xyz",
-        expires_at=datetime.now() + timedelta(hours=1),
-        created_at=datetime.now(),
-        expires_at_ttl=int((datetime.now() + timedelta(hours=1)).timestamp()),
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
+        created_at=datetime.now(UTC),
+        expires_at_ttl=int((datetime.now(UTC) + timedelta(hours=1)).timestamp()),
     )
 
     repo.create_invitation(invitation)
@@ -73,18 +73,18 @@ def test_create_multiple_invitations(repo):
         token_hash="c" * 64,
         technician_id="tech-111",
         telegram_link="https://t.me/bot?start=token1",
-        expires_at=datetime.now() + timedelta(hours=1),
-        created_at=datetime.now(),
-        expires_at_ttl=int((datetime.now() + timedelta(hours=1)).timestamp()),
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
+        created_at=datetime.now(UTC),
+        expires_at_ttl=int((datetime.now(UTC) + timedelta(hours=1)).timestamp()),
     )
 
     invitation2 = TelegramInvitation(
         token_hash="d" * 64,
         technician_id="tech-222",
         telegram_link="https://t.me/bot?start=token2",
-        expires_at=datetime.now() + timedelta(hours=1),
-        created_at=datetime.now(),
-        expires_at_ttl=int((datetime.now() + timedelta(hours=1)).timestamp()),
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
+        created_at=datetime.now(UTC),
+        expires_at_ttl=int((datetime.now(UTC) + timedelta(hours=1)).timestamp()),
     )
 
     repo.create_invitation(invitation1)
@@ -104,9 +104,9 @@ def test_invitation_initially_unused(repo):
         token_hash="e" * 64,
         technician_id="tech-333",
         telegram_link="https://t.me/bot?start=token3",
-        expires_at=datetime.now() + timedelta(hours=1),
-        created_at=datetime.now(),
-        expires_at_ttl=int((datetime.now() + timedelta(hours=1)).timestamp()),
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
+        created_at=datetime.now(UTC),
+        expires_at_ttl=int((datetime.now(UTC) + timedelta(hours=1)).timestamp()),
     )
 
     repo.create_invitation(invitation)

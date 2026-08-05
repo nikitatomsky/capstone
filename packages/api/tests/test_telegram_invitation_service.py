@@ -61,7 +61,7 @@ def test_generate_invitation_sets_expiration(service, mock_repo):
 
     before = datetime.now(UTC)
     invitation = service.generate_invitation(technician_id="tech-123")
-    after = datetime.now(UTC)
+    datetime.now(UTC)
 
     # Expiration should be ~1 hour from now (3600 seconds)
     expected_expiry = before + timedelta(seconds=3600)

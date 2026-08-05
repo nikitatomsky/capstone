@@ -23,21 +23,15 @@ async def stream_assignments():
         EventSourceResponse: SSE stream with assignment update events
 
     Events:
-        - assignment_created: New assignment created
-        - assignment_updated: Assignment status changed
+        - assignment_update: Assignment created or status changed
 
     Example client usage (JavaScript):
         ```javascript
         const eventSource = new EventSource('http://localhost:4000/api/assignments/stream');
 
-        eventSource.addEventListener('assignment_created', (event) => {
+        eventSource.addEventListener('assignment_update', (event) => {
             const data = JSON.parse(event.data);
-            console.log('New assignment:', data);
-        });
-
-        eventSource.addEventListener('assignment_updated', (event) => {
-            const data = JSON.parse(event.data);
-            console.log('Assignment updated:', data);
+            console.log('Assignment update:', data);
         });
         ```
     """

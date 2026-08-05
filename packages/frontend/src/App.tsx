@@ -9,22 +9,22 @@ import './App.css';
 function App() {
   return (
     <BrowserRouter>
-      <div style={{ minHeight: '100vh' }}>
-        <nav style={{ 
-          padding: '20px', 
-          backgroundColor: '#f5f5f5', 
-          borderBottom: '1px solid #ddd',
-          marginBottom: '20px'
-        }}>
-          <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
-            <h2 style={{ margin: 0 }}>Field Intake Dashboard</h2>
-            <Link to="/" style={{ textDecoration: 'none', color: '#007bff' }}>Assignments</Link>
-            <Link to="/create" style={{ textDecoration: 'none', color: '#007bff' }}>Create Assignment</Link>
-            <span style={{ borderLeft: '1px solid #ccc', height: '20px' }}></span>
-            <Link to="/technicians" style={{ textDecoration: 'none', color: '#007bff' }}>Technicians</Link>
-            <Link to="/technicians/create" style={{ textDecoration: 'none', color: '#007bff' }}>Add Technician</Link>
+      <div>
+        <header className="header">
+          <div className="container">
+            <div className="header__content">
+              <h1 className="header__title">Field Intake Service</h1>
+              <nav className="header__nav" aria-label="Main navigation">
+                <ul role="list">
+                  <li><Link to="/">Assignments</Link></li>
+                  <li><Link to="/create">Create Assignment</Link></li>
+                  <li><Link to="/technicians">Technicians</Link></li>
+                  <li><Link to="/technicians/create">Add Technician</Link></li>
+                </ul>
+              </nav>
+            </div>
           </div>
-        </nav>
+        </header>
 
         <Routes>
           <Route path="/" element={<AssignmentList />} />
