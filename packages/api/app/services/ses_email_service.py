@@ -31,7 +31,10 @@ class SESEmailService:
         if config_set_raw and not config_set_raw.startswith("#"):
             self.configuration_set = config_set_raw
 
-        logger.info(f"Initialized SESEmailService (region: {self.region_name}, from: {self.from_email})")
+        logger.info(
+            f"Initialized SESEmailService (region: {self.region_name}, "
+            f"from: {self.from_email})"
+        )
 
     async def send_telegram_invitation(
         self,
@@ -61,8 +64,8 @@ class SESEmailService:
             <p>You've been invited to connect your Telegram account to the Field Intake Service.</p>
             <p>Click the button below to get started:</p>
             <p style="text-align: center; margin: 30px 0;">
-                <a href="{telegram_link}" 
-                   style="background-color: #0088cc; color: white; padding: 12px 24px; 
+                <a href="{telegram_link}"
+                   style="background-color: #0088cc; color: white; padding: 12px 24px;
                           text-decoration: none; border-radius: 4px; display: inline-block;">
                     Connect Telegram Account
                 </a>

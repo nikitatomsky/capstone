@@ -1,5 +1,5 @@
 """Tests for Telegram invitation Pydantic models."""
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from pydantic import ValidationError
@@ -13,7 +13,7 @@ def test_telegram_invitation_create_valid():
         token_hash="a" * 64,  # SHA-256 produces 64 hex chars
         technician_id="tech-uuid-123",
         telegram_link="https://t.me/mybot?start=abc123",
-        expires_at=datetime.now() + timedelta(hours=1),
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
     )
     assert invitation.token_hash == "a" * 64
     assert invitation.technician_id == "tech-uuid-123"
@@ -26,8 +26,8 @@ def test_telegram_invitation_with_defaults():
         token_hash="a" * 64,
         technician_id="tech-uuid-123",
         telegram_link="https://t.me/mybot?start=abc123",
-        expires_at=datetime.now() + timedelta(hours=1),
-        created_at=datetime.now(),
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
+        created_at=datetime.now(UTC),
     )
     assert invitation.used_at is None
 
@@ -38,9 +38,9 @@ def test_telegram_invitation_used():
         token_hash="a" * 64,
         technician_id="tech-uuid-123",
         telegram_link="https://t.me/mybot?start=abc123",
-        expires_at=datetime.now() + timedelta(hours=1),
-        created_at=datetime.now(),
-        used_at=datetime.now(),
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
+        created_at=datetime.now(UTC),
+        used_at=datetime.now(UTC),
     )
     assert invitation.used_at is not None
 
@@ -52,7 +52,7 @@ def test_telegram_invitation_create_invalid_hash_length():
             token_hash="too_short",  # Not 64 characters
             technician_id="tech-uuid-123",
             telegram_link="https://t.me/mybot?start=abc123",
-            expires_at=datetime.now() + timedelta(hours=1),
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
         )
 
     errors = exc_info.value.errors()

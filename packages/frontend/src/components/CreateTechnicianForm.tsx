@@ -7,10 +7,12 @@ export default function CreateTechnicianForm() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errors, setErrors] = useState<Record<string, string>>({});
   
   const [formData, setFormData] = useState({
     name: '',
     phone_number: '',
+    email: '',
     chat_id: '',
   });
 
@@ -18,11 +20,25 @@ export default function CreateTechnicianForm() {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setErrors({});
+
+    // Validate
+    const newErrors: Record<string, string> = {};
+    if (!formData.name.trim()) newErrors.name = 'Name is required';
+    if (!formData.phone_number.trim()) newErrors.phone_number = 'Phone number is required';
+    
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      setLoading(false);
+      return;
+    }
 
     try {
       const payload = {
         name: formData.name,
         phone_number: formData.phone_number,
+        // Only include email if provided
+        ...(formData.email && { email: formData.email }),
         // Only include chat_id if provided
         ...(formData.chat_id && { chat_id: parseInt(formData.chat_id) }),
       };
@@ -37,122 +53,100 @@ export default function CreateTechnicianForm() {
   };
 
   return (
-    <div style={{ padding: '20px', maxWidth: '600px' }}>
-      <h1>Create Technician</h1>
-      
-      {error && (
-        <div style={{ 
-          padding: '10px', 
-          marginBottom: '15px', 
-          backgroundColor: '#fee', 
-          border: '1px solid #fcc',
-          borderRadius: '4px',
-          color: '#c00'
-        }}>
-          {error}
+    <main className="main">
+      <div className="container">
+        <div className="page-header">
+          <div className="page-header__content">
+            <h2 className="page-header__title">Add Technician</h2>
+            <p className="page-header__subtitle">
+              Register a new field service technician
+            </p>
+          </div>
         </div>
-      )}
-      
-      <form onSubmit={handleSubmit}>
-        <div style={{ marginBottom: '15px' }}>
-          <label>
-            Name: <span style={{ color: 'red' }}>*</span>
+
+        {error && (
+          <div className="info-box" style={{
+            borderColor: 'var(--color-danger)',
+            backgroundColor: 'var(--color-danger-light)',
+            marginBottom: 'var(--space-6)'
+          }}>
+            <p style={{ margin: 0 }}>{error}</p>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="form" style={{ maxWidth: '600px' }}>
+          <div className="form-group">
+            <label htmlFor="name" className="form-label">
+              Name <span style={{ color: 'var(--color-danger)' }}>*</span>
+            </label>
             <input
+              id="name"
               type="text"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               required
               placeholder="John Doe"
-              style={{ 
-                display: 'block', 
-                width: '100%', 
-                padding: '8px', 
-                marginTop: '5px',
-                borderRadius: '4px',
-                border: '1px solid #ddd'
-              }}
+              className="form-input"
             />
-          </label>
-        </div>
+            {errors.name && <span className="form-hint" style={{ color: 'var(--color-danger)' }}>{errors.name}</span>}
+          </div>
 
-        <div style={{ marginBottom: '15px' }}>
-          <label>
-            Phone Number: <span style={{ color: 'red' }}>*</span>
+                    <div className="form-group">
+            <label htmlFor="email" className="form-label">
+              Email <span style={{ color: 'var(--color-danger)' }}>*</span>
+            </label>
             <input
+              id="email"
+              type="email"
+              value={formData.email}
+              required
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              placeholder="john@example.com"
+              className="form-input"
+            />
+            <span className="form-hint">
+              Required for completing onboarding. 
+            </span>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="phone_number" className="form-label">
+              Phone Number 
+            </label>
+            <input
+              id="phone_number"
               type="tel"
               value={formData.phone_number}
               onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
-              required
               placeholder="+1-555-123-4567"
-              style={{ 
-                display: 'block', 
-                width: '100%', 
-                padding: '8px', 
-                marginTop: '5px',
-                borderRadius: '4px',
-                border: '1px solid #ddd'
-              }}
+              className="form-input"
             />
-            <small style={{ color: '#666', fontSize: '0.85em' }}>
-              Used for SMS notifications and contact
-            </small>
-          </label>
-        </div>
+            <span className="form-hint">
+              Used for SMS notifications if no email provided
+            </span>
+            {errors.phone_number && <span className="form-hint" style={{ color: 'var(--color-danger)' }}>{errors.phone_number}</span>}
+          </div>
 
-        <div style={{ marginBottom: '15px' }}>
-          <label>
-            Telegram Chat ID (optional):
-            <input
-              type="number"
-              value={formData.chat_id}
-              onChange={(e) => setFormData({ ...formData, chat_id: e.target.value })}
-              placeholder="123456789"
-              style={{ 
-                display: 'block', 
-                width: '100%', 
-                padding: '8px', 
-                marginTop: '5px',
-                borderRadius: '4px',
-                border: '1px solid #ddd'
-              }}
-            />
-            <small style={{ color: '#666', fontSize: '0.85em' }}>
-              Leave empty if technician hasn't connected via Telegram yet
-            </small>
-          </label>
-        </div>
 
-        <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
-          <button 
-            type="submit" 
-            disabled={loading} 
-            style={{ 
-              padding: '10px 20px',
-              backgroundColor: loading ? '#ccc' : '#28a745',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: loading ? 'not-allowed' : 'pointer'
-            }}
-          >
-            {loading ? 'Creating...' : 'Create Technician'}
-          </button>
-          <button 
-            type="button" 
-            onClick={() => navigate('/technicians')} 
-            style={{ 
-              padding: '10px 20px',
-              backgroundColor: '#6c757d',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer'
-            }}
-          >
-            Cancel
-          </button>
-        </div>
-      </form>
-    </div>
+
+          <div style={{ display: 'flex', gap: 'var(--space-3)', marginTop: 'var(--space-6)' }}>
+            <button 
+              type="submit" 
+              disabled={loading} 
+              className="btn btn--primary"
+            >
+              {loading ? 'Creating...' : 'Create Technician'}
+            </button>
+            <button 
+              type="button" 
+              onClick={() => navigate('/technicians')} 
+              className="btn btn--secondary"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    </main>
   );
 }

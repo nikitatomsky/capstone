@@ -56,9 +56,10 @@ def get_assignment_repo() -> AssignmentRepository:
         sample_tech_1 = tech_repo.create_technician(TechnicianCreate(
             name="John Smith",
             phone_number="+1234567890",
-            chat_id=123456789
+            chat_id=123456789,
+            email="nikita.tomsky@gmail.com"
         ))
-        sample_tech_2 = tech_repo.create_technician(TechnicianCreate(
+        tech_repo.create_technician(TechnicianCreate(
             name="Jane Doe",
             phone_number="+1987654321",
             chat_id=987654321
@@ -69,10 +70,10 @@ def get_assignment_repo() -> AssignmentRepository:
             assignment_id="assign-001",
             technician_id=sample_tech_1.technician_id,
             technician_name="John Smith",
-            title="HVAC Repair at Downtown Office",
+            title="Delivering Coca-Cola to Downtown Office",
             description=(
-                "Air conditioning unit not cooling properly. "
-                "Check refrigerant levels and filters."
+                "People are thirsty. "
+                "Put the Coca-Cola bottles in the fridge and make sure they are cold. "
             ),
             priority="high",
             status="assigned",
@@ -81,35 +82,7 @@ def get_assignment_repo() -> AssignmentRepository:
             completed_at=None,
             intake_record_id=None
         )
-        sample_assignment_2 = Assignment(
-            assignment_id="assign-002",
-            technician_id=sample_tech_2.technician_id,
-            technician_name="Jane Doe",
-            title="Plumbing Inspection - Warehouse",
-            description="Routine inspection of plumbing systems in warehouse facility.",
-            priority="medium",
-            status="in_progress",
-            created_at=datetime.now(UTC),
-            assigned_at=datetime.now(UTC),
-            completed_at=None,
-            intake_record_id=None
-        )
-        sample_assignment_3 = Assignment(
-            assignment_id="assign-003",
-            technician_id=sample_tech_1.technician_id,
-            technician_name="John Smith",
-            title="Emergency Generator Maintenance",
-            description="Quarterly maintenance and testing of backup generator.",
-            priority="urgent",
-            status="pending",
-            created_at=datetime.now(UTC),
-            assigned_at=None,
-            completed_at=None,
-            intake_record_id=None
-        )
         repo.create_assignment(sample_assignment_1)
-        repo.create_assignment(sample_assignment_2)
-        repo.create_assignment(sample_assignment_3)
 
         _repository_instance = repo
     return _repository_instance
@@ -196,7 +169,7 @@ async def create_assignment(
 
     # Broadcast assignment creation event via SSE (Step 3-0)
     await sse_manager.broadcast(
-        "assignment_created",
+        "assignment_update",
         {
             "assignment_id": created_assignment.assignment_id,
             "status": created_assignment.status,

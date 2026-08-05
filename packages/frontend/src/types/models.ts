@@ -21,8 +21,10 @@ export interface Technician {
   technician_id: string; // UUID primary key
   name: string;
   phone_number: string;
+  email?: string; // Optional email for invitations
   chat_id: number | null; // Optional Telegram integration
   registered_at: string;
+  invitation_status?: 'pending' | 'sent' | 'connected'; // Invitation state
 }
 
 export interface AssignmentCreate {
@@ -35,5 +37,16 @@ export interface AssignmentCreate {
 export interface TechnicianCreate {
   name: string;
   phone_number: string;
+  email?: string; // Optional email for invitations
   chat_id?: number | null; // Optional Telegram chat_id
+}
+
+export interface TelegramInvitationResponse {
+  success: boolean;
+  delivery_method: string;
+  destination: string;
+  invitation_link: string;
+  expires_at: string | null;
+  delivery_attempted: boolean;
+  delivery_succeeded: boolean;
 }

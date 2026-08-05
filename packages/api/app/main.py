@@ -112,13 +112,14 @@ def _truncate_for_log(text: str | None, max_length: int = MAX_LOG_MESSAGE_LENGTH
 # Initialize webhook router with dependencies
 # Import after app initialization to avoid circular dependency
 from app.routers.assignment import (  # noqa: E402
-    _repository_instance as assignment_repo,
+    get_assignment_repo,
 )
 from app.routers.technician import (  # noqa: E402
     get_technician_repo,
 )
 
-# Initialize technician repository (ensures it's not None for webhook)
+# Initialize repositories (ensures they're not None for webhook)
+assignment_repo = get_assignment_repo()
 technician_repo = get_technician_repo()
 
 # Inject shared invitation service into technician router (Issue #39)

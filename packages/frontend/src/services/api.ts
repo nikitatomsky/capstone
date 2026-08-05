@@ -1,4 +1,4 @@
-import type { Assignment, AssignmentCreate, Technician, TechnicianCreate } from '../types/models';
+import type { Assignment, AssignmentCreate, Technician, TechnicianCreate, TelegramInvitationResponse } from '../types/models';
 
 const API_BASE_URL = 'http://localhost:4000';
 
@@ -60,5 +60,17 @@ export const api = {
       const error = await response.json();
       throw new Error(error.detail || 'Failed to delete technician');
     }
+  },
+
+  async sendTechnicianInvitation(technicianId: string, deliveryMethod: 'email' | 'sms' = 'email'): Promise<TelegramInvitationResponse> {
+    const response = await fetch(
+      `${API_BASE_URL}/api/technicians/${technicianId}/telegram-invitation?delivery_method=${deliveryMethod}`,
+      { method: 'POST' }
+    );
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to send invitation');
+    }
+    return response.json();
   },
 };
