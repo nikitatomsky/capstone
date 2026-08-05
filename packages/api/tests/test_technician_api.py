@@ -210,9 +210,9 @@ def test_post_telegram_invitation_success(monkeypatch):
     monkeypatch.setattr(tech_router, "_invitation_service", invitation_service)
     monkeypatch.setattr(tech_router, "_sms_service", sms_service)
 
-    # Send invitation
+    # Send invitation (explicitly request SMS method)
     response = client.post(
-        f"/api/technicians/{technician_id}/telegram-invitation"
+        f"/api/technicians/{technician_id}/telegram-invitation?delivery_method=sms"
     )
 
     assert response.status_code == 200
@@ -220,7 +220,8 @@ def test_post_telegram_invitation_success(monkeypatch):
 
     assert data["success"] is True
     assert "expires_at" in data
-    assert data["phone_number"] == "+1-555-0123"
+    assert data["destination"] == "+1-555-0123"
+    assert data["delivery_method"] == "sms"
 
     # Verify SMS sent
     assert len(sms_service.sent_messages) == 1
@@ -266,9 +267,9 @@ def test_post_telegram_invitation_no_phone_number(monkeypatch):
     monkeypatch.setattr(tech_router, "_invitation_service", invitation_service)
     monkeypatch.setattr(tech_router, "_sms_service", sms_service)
 
-    # Try to send invitation
+    # Try to send invitation (explicitly request SMS method, which will fail due to no phone)
     response = client.post(
-        f"/api/technicians/{technician_id}/telegram-invitation"
+        f"/api/technicians/{technician_id}/telegram-invitation?delivery_method=sms"
     )
 
     assert response.status_code == 400
@@ -307,7 +308,122 @@ def test_post_telegram_invitation_sms_failure_still_creates_invitation(monkeypat
     monkeypatch.setattr(tech_router, "_invitation_service", invitation_service)
     monkeypatch.setattr(tech_router, "_sms_service", sms_service)
 
-    # Send invitation (should succeed despite SMS failure)
+    # Send invitation (should succeed despite SMS failure, explicitly request SMS method)
+    response = client.post(
+        f"/api/technicians/{technician_id}/telegram-invitation?delivery_method=sms"
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+    # Invitation created even though SMS failed
+
+
+# Invitation Delivery Abstraction Tests (Issue #39)
+
+
+def test_post_telegram_invitation_with_sms_method(monkeypatch):
+    """Test sending invitation with explicit SMS method (Issue #39)."""
+    from app.repositories.telegram_invitation_repository import TelegramInvitationRepository
+    from app.services.sms_service import FakeSMSService
+    from app.services.telegram_invitation_service import TelegramInvitationService
+
+    # Create technician
+    tech_data = {
+        "name": "SMS User",
+        "phone_number": "+1-555-1111",
+    }
+    create_response = client.post("/api/technicians/", json=tech_data)
+    technician_id = create_response.json()["technician_id"]
+
+    # Mock services
+    sms_service = FakeSMSService()
+    invitation_repo = TelegramInvitationRepository()
+    invitation_service = TelegramInvitationService(
+        invitation_repo, "test_bot", 3600
+    )
+
+    # Inject services into router
+    import app.routers.technician as tech_router
+    monkeypatch.setattr(tech_router, "_invitation_service", invitation_service)
+    monkeypatch.setattr(tech_router, "_sms_service", sms_service)
+
+    # Send invitation with explicit SMS method
+    response = client.post(
+        f"/api/technicians/{technician_id}/telegram-invitation?delivery_method=sms"
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+    assert data["delivery_method"] == "sms"
+
+    # Verify SMS sent
+    assert len(sms_service.sent_messages) == 1
+
+
+def test_post_telegram_invitation_with_email_method(monkeypatch):
+    """Test sending invitation with email method (Issue #39)."""
+    from app.repositories.telegram_invitation_repository import TelegramInvitationRepository
+    from app.services.telegram_invitation_service import TelegramInvitationService
+
+    # Create technician with email
+    tech_data = {
+        "name": "Email User",
+        "email": "user@example.com",
+    }
+    create_response = client.post("/api/technicians/", json=tech_data)
+    technician_id = create_response.json()["technician_id"]
+
+    # Mock services
+    invitation_repo = TelegramInvitationRepository()
+    invitation_service = TelegramInvitationService(
+        invitation_repo, "test_bot", 3600
+    )
+
+    # Inject services into router
+    import app.routers.technician as tech_router
+    monkeypatch.setattr(tech_router, "_invitation_service", invitation_service)
+
+    # Send invitation with email method
+    response = client.post(
+        f"/api/technicians/{technician_id}/telegram-invitation?delivery_method=email"
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+    assert data["delivery_method"] == "email"
+    assert data["destination"] == "user@example.com"
+
+
+def test_post_telegram_invitation_defaults_to_email(monkeypatch):
+    """Test that invitation defaults to email if no method specified (Issue #39)."""
+    from app.repositories.telegram_invitation_repository import TelegramInvitationRepository
+    from app.services.telegram_invitation_service import TelegramInvitationService
+
+    # Create technician with email
+    tech_data = {
+        "name": "Default User",
+        "email": "default@example.com",
+    }
+    create_response = client.post("/api/technicians/", json=tech_data)
+    technician_id = create_response.json()["technician_id"]
+
+    # Mock services
+    from app.services.fake_email_service import FakeEmailService
+    email_service = FakeEmailService()
+    invitation_repo = TelegramInvitationRepository()
+    invitation_service = TelegramInvitationService(
+        invitation_repo, "test_bot", 3600
+    )
+
+    # Inject services into router
+    import app.routers.technician as tech_router
+    monkeypatch.setattr(tech_router, "_invitation_service", invitation_service)
+    monkeypatch.setattr(tech_router, "_email_service", email_service)
+
+    # Send invitation without method parameter (should default to email)
     response = client.post(
         f"/api/technicians/{technician_id}/telegram-invitation"
     )
@@ -315,4 +431,36 @@ def test_post_telegram_invitation_sms_failure_still_creates_invitation(monkeypat
     assert response.status_code == 200
     data = response.json()
     assert data["success"] is True
-    # Invitation created even though SMS failed
+    assert data["delivery_method"] == "email"
+
+
+def test_post_telegram_invitation_invalid_method(monkeypatch):
+    """Test that invalid delivery method returns 400 (Issue #39)."""
+    from app.repositories.telegram_invitation_repository import TelegramInvitationRepository
+    from app.services.telegram_invitation_service import TelegramInvitationService
+
+    # Create technician
+    tech_data = {
+        "name": "Test User",
+        "phone_number": "+1-555-3333",
+    }
+    create_response = client.post("/api/technicians/", json=tech_data)
+    technician_id = create_response.json()["technician_id"]
+
+    # Mock services
+    invitation_repo = TelegramInvitationRepository()
+    invitation_service = TelegramInvitationService(
+        invitation_repo, "test_bot", 3600
+    )
+
+    # Inject services into router
+    import app.routers.technician as tech_router
+    monkeypatch.setattr(tech_router, "_invitation_service", invitation_service)
+
+    # Send invitation with invalid method
+    response = client.post(
+        f"/api/technicians/{technician_id}/telegram-invitation?delivery_method=invalid"
+    )
+
+    assert response.status_code == 400
+    assert "unsupported" in response.json()["detail"].lower()

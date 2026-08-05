@@ -36,6 +36,11 @@ class Technician(BaseModel):
         description="Phone number (can be actual phone or UUID placeholder)"
     )
 
+    email: str | None = Field(
+        default=None,
+        description="Email address (for email-based invitation delivery)"
+    )
+
     chat_id: int | None = Field(
         default=None,
         description="Optional Telegram chat_id (for Telegram integration)"
@@ -79,6 +84,11 @@ class TechnicianCreate(BaseModel):
     phone_number: str | None = Field(
         default=None,
         description="Phone number (can be actual phone or UUID placeholder)"
+    )
+
+    email: str | None = Field(
+        default=None,
+        description="Email address (for email-based invitation delivery)"
     )
 
     chat_id: int | None = Field(

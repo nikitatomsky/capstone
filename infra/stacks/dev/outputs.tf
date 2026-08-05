@@ -96,3 +96,25 @@ output "telegram_backend_policy_name" {
   description = "Name of the Telegram backend IAM policy"
   value       = module.iam.telegram_backend_policy_name
 }
+
+# SES outputs
+output "ses_configuration_set_name" {
+  description = "Name of the SES configuration set for email delivery"
+  value       = module.ses.configuration_set_name
+}
+
+output "ses_send_policy_arn" {
+  description = "ARN of the IAM policy for sending emails via SES"
+  value       = module.ses.ses_send_policy_arn
+}
+
+output "ses_bounces_topic_arn" {
+  description = "ARN of the SNS topic for SES bounce notifications"
+  value       = module.ses.bounces_topic_arn
+}
+
+output "ses_domain_verification_token" {
+  description = "Domain verification token for DNS (if using domain identity)"
+  value       = module.ses.domain_verification_token
+  sensitive   = true
+}

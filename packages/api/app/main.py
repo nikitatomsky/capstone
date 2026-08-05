@@ -115,8 +115,17 @@ from app.routers.assignment import (  # noqa: E402
     _repository_instance as assignment_repo,
 )
 from app.routers.technician import (  # noqa: E402
-    _technician_repository as technician_repo,
+    get_technician_repo,
 )
+
+# Initialize technician repository (ensures it's not None for webhook)
+technician_repo = get_technician_repo()
+
+# Inject shared invitation service into technician router (Issue #39)
+# This ensures both webhook and technician router use the SAME repository instance
+from app.routers.technician import set_invitation_service  # noqa: E402
+
+set_invitation_service(invitation_service)
 
 webhook.init_dependencies(
     session_service,
@@ -126,7 +135,7 @@ webhook.init_dependencies(
     get_missing_fields,
     generate_followup_question,
     assignment_repo,  # Pass the assignment repository
-    technician_repo,  # Pass the technician repository (Step 2-3)
+    technician_repo,  # Pass the initialized technician repository (Step 2-3)
     invitation_service,  # NEW: Pass the invitation service (Step 4-2)
 )
 

@@ -4,6 +4,93 @@ Development session history for the Field Intake Service.
 
 ---
 
+## 2026-08-04 - Step 4-3: Abstract Invitation Delivery with Multi-Channel Support (Issue #39)
+
+**Focus**: Create abstraction layer for multi-channel invitation delivery (SMS, Email, etc.)
+
+**Accomplishments**:
+- **TDD Workflow**: Followed strict RED-GREEN-REFACTOR cycle
+  - RED: Wrote 8 tests for InvitationDeliveryService abstraction (all failed initially)
+  - GREEN: Implemented minimal code to make all tests pass
+  - REFACTOR: Updated existing tests to use new response format
+- **Abstraction Layer**: Created `InvitationDeliveryService` base class
+  - Decouples invitation generation from delivery mechanism
+  - Enables easy addition of new delivery channels
+  - Follows dependency inversion principle
+- **Delivery Implementations**:
+  - `SMSInvitationDelivery`: Production SMS delivery via existing SMS service
+  - `EmailInvitationDelivery`: Stub implementation (ready for future email integration)
+  - Both follow non-blocking notification pattern
+- **Delivery Result Model**: Created `DeliveryResult` dataclass
+  - Captures delivery success/failure with detailed context
+  - Includes delivery method, destination, invitation link, expiration
+  - Tracks delivery attempt status (attempted, succeeded)
+- **Factory Pattern**: Implemented `get_invitation_delivery_service()`
+  - Returns appropriate delivery service based on method parameter
+  - Validates delivery method and required dependencies
+  - Raises ValueError for unsupported methods
+- **API Enhancement**: Updated `/api/technicians/{id}/telegram-invitation` endpoint
+  - Accepts `delivery_method` query parameter (defaults to "sms")
+  - Uses factory to get appropriate delivery service
+  - Returns unified response format (delivery_method, destination, etc.)
+  - Maintains backward compatibility (defaults to SMS)
+- **Model Updates**: Added `email` field to Technician model
+  - Updated TechnicianCreate and Technician Pydantic models
+  - Updated DynamoDBTechnicianRepository to handle email
+  - Updated FakeTechnicianRepository to handle email
+- **Test Coverage**: All 167 tests passing (8 new invitation delivery tests, 4 new endpoint tests)
+
+**Key Decisions**:
+- Abstraction at delivery level (not just transport) - combines generation + delivery
+- Factory pattern for delivery service selection
+- Unified DeliveryResult for all delivery channels
+- Email stub implementation (ready for SendGrid/SES integration)
+- Backward compatible default (SMS) for existing clients
+- Repository pattern updated to support email field
+
+**Patterns Discovered**:
+- **Delivery Abstraction Pattern**: Combine generation + delivery in one service
+  ```python
+  class InvitationDeliveryService(ABC):
+      @abstractmethod
+      async def deliver(self, technician: Technician) -> DeliveryResult:
+          """Generate and deliver invitation."""
+  ```
+- **Multi-Channel Factory Pattern**: Select delivery mechanism at runtime
+  ```python
+  delivery_service = get_invitation_delivery_service(
+      method="sms",  # or "email"
+      invitation_service=invitation_service,
+      sms_service=sms_service,
+  )
+  result = await delivery_service.deliver(technician)
+  ```
+
+**Technical Details**:
+- SMS delivery: Requires phone_number, uses existing SMS service
+- Email delivery: Requires email, stub implementation (logs only)
+- Query parameter: `?delivery_method=sms` or `?delivery_method=email`
+- Response fields: success, delivery_method, destination, invitation_link, expires_at
+- Error handling: 400 for invalid method or missing required field (phone/email)
+
+**What's Next**:
+- Manual testing: Test email delivery method in Postman/curl
+- Integration: Add SendGrid or AWS SES for production email delivery
+- Frontend: Update admin UI to allow selection of delivery method
+- Documentation: Update API docs with new delivery_method parameter
+
+**Files Created**:
+- `app/services/invitation_delivery_service.py`: Abstraction layer and implementations
+- `tests/test_invitation_delivery_service.py`: 8 comprehensive tests
+
+**Files Modified**:
+- `app/models/technician.py`: Added email field
+- `app/repositories/technician_repository.py`: Handle email in create/update
+- `app/routers/technician.py`: Use delivery abstraction instead of direct SMS
+- `tests/test_technician_api.py`: Added 4 new tests, updated 1 existing test
+
+---
+
 ## 2026-08-04 - Step 4-2: Extend Webhook for Telegram Invitation Tokens
 
 **Focus**: Implement `/start` command handling for automated chat ID linking via invitation tokens

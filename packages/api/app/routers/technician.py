@@ -35,6 +35,7 @@ logger = logging.getLogger(__name__)
 _technician_repository: TechnicianRepository | None = None
 _invitation_service: TelegramInvitationService | None = None
 _sms_service: SMSService | None = None
+_email_service = None  # Type: SESEmailService or FakeEmailService
 
 
 def get_technician_repo() -> TechnicianRepository:
@@ -50,20 +51,26 @@ def get_technician_repo() -> TechnicianRepository:
     return _technician_repository
 
 
+def set_invitation_service(service: TelegramInvitationService) -> None:
+    """
+    Set the shared invitation service instance (called from main.py).
+    
+    Args:
+        service: Shared TelegramInvitationService instance
+    """
+    global _invitation_service
+    _invitation_service = service
+
+
 def get_invitation_service() -> TelegramInvitationService:
     """Dependency injection for invitation service (Issue #37)."""
     global _invitation_service
     if _invitation_service is None:
-        from app.repositories.telegram_invitation_repository import TelegramInvitationRepository
-
-        repo = TelegramInvitationRepository()
-        _invitation_service = TelegramInvitationService(
-            repository=repo,
-            bot_username=os.getenv("TELEGRAM_BOT_USERNAME", "field_bot"),
-            ttl_seconds=int(os.getenv("TELEGRAM_INVITATION_TTL_SECONDS", "3600")),
+        # This should not happen if main.py properly initialized
+        raise RuntimeError(
+            "Invitation service not initialized. "
+            "Call set_invitation_service() from main.py first."
         )
-        logger.info("Initialized TelegramInvitationService")
-
     return _invitation_service
 
 
@@ -82,6 +89,23 @@ def get_sms_service() -> SMSService:
             logger.info("Initialized FakeSMSService for local development")
 
     return _sms_service
+
+
+def get_email_service():
+    """Dependency injection for Email service (Issue #39)."""
+    global _email_service
+    if _email_service is None:
+        # Use fake service for local dev, SES for production
+        if os.getenv("USE_AWS_SES", "false").lower() == "true":
+            from app.services.ses_email_service import SESEmailService
+            _email_service = SESEmailService()
+            logger.info("Initialized SESEmailService")
+        else:
+            from app.services.fake_email_service import FakeEmailService
+            _email_service = FakeEmailService()
+            logger.info("Initialized FakeEmailService for local development")
+
+    return _email_service
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED, response_model=Technician)
@@ -207,26 +231,38 @@ async def delete_technician(
 )
 async def create_telegram_invitation(
     technician_id: str,
+    delivery_method: str = "email",  # Issue #39: Support multiple delivery methods (defaults to email with SES)
     repo: TechnicianRepository = Depends(get_technician_repo),
     invitation_service: TelegramInvitationService = Depends(get_invitation_service),
     sms_service: SMSService = Depends(get_sms_service),
+    email_service=Depends(get_email_service),
 ):
     """
-    Create Telegram invitation and send via SMS (Issue #37).
+    Create Telegram invitation and deliver via specified method (Issue #37, #39).
 
     Args:
         technician_id: UUID of technician
+        delivery_method: Delivery method ("sms" or "email", defaults to "email")
         repo: Technician repository (injected)
         invitation_service: Invitation service (injected)
         sms_service: SMS service (injected)
+        email_service: Email service (injected)
 
     Returns:
-        Invitation details with expiration and phone number
+        Invitation details with expiration and delivery information
 
     Raises:
         404: Technician not found
-        400: Technician has no phone number
+        400: Invalid delivery method or missing required field (phone/email)
+    
+    Note:
+        - Email delivery uses AWS SES (production) or logs only (local dev)
+        - SMS delivery uses AWS SNS (production) or FakeSMSService (local dev)
     """
+    from app.services.invitation_delivery_service import (
+        get_invitation_delivery_service,
+    )
+
     # Get technician
     technician = repo.get_technician(technician_id)
     if not technician:
@@ -235,39 +271,41 @@ async def create_telegram_invitation(
             detail=f"Technician {technician_id} not found"
         )
 
-    # Verify phone number exists
-    if not technician.phone_number:
+    # Get appropriate delivery service
+    try:
+        delivery_service = get_invitation_delivery_service(
+            method=delivery_method,
+            invitation_service=invitation_service,
+            sms_service=sms_service,
+            email_service=email_service,
+        )
+    except ValueError as e:
+        logger.error(f"Invalid delivery method '{delivery_method}': {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Technician has no phone number registered"
+            detail=f"Unsupported delivery method: {delivery_method}"
+        ) from e
+
+    # Deliver invitation
+    result = await delivery_service.deliver(technician)
+
+    # If delivery validation failed (no phone/email), return 400
+    if not result.success:
+        logger.warning(
+            f"Delivery failed for {technician_id}: {result.error}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result.error
         )
 
-    # Generate invitation
-    invitation = invitation_service.generate_invitation(technician_id)
-
-    # Send SMS (non-blocking - log error but don't fail request)
-    try:
-        sms_sent = await sms_service.send_telegram_invitation(
-            phone_number=technician.phone_number,
-            technician_name=technician.name,
-            telegram_link=invitation.telegram_link,
-        )
-
-        if not sms_sent:
-            logger.error(
-                f"Failed to send SMS invitation to {technician_id} "
-                f"at {technician.phone_number}"
-            )
-    except Exception as e:
-        logger.error(
-            f"Exception sending SMS to {technician_id}: {e}",
-            exc_info=True
-        )
-
-    # Return invitation details (even if SMS failed)
+    # Return success with delivery details
     return {
-        "success": True,
-        "expires_at": invitation.expires_at.isoformat(),
-        "phone_number": technician.phone_number,
-        "invitation_link": invitation.telegram_link,
+        "success": result.success,
+        "delivery_method": result.delivery_method,
+        "destination": result.destination,
+        "invitation_link": result.invitation_link,
+        "expires_at": result.expires_at.isoformat() if result.expires_at else None,
+        "delivery_attempted": result.delivery_attempted,
+        "delivery_succeeded": result.delivery_succeeded,
     }
