@@ -18,6 +18,14 @@ FastAPI backend for the Field Intake Service, providing conversational intake th
 - `AWS_SECRET_ACCESS_KEY`: AWS secret key (for local development)
 - `AWS_DEFAULT_REGION`: AWS default region
 
+### SMS Configuration (Issue #37)
+
+- `USE_AWS_SNS`: Set to `true` to enable AWS SNS for SMS (default: `false`)
+- `AWS_SNS_SENDER_ID`: Optional SMS sender ID (default: `FieldIntake`)
+
+**Local Development**: Uses `FakeSMSService` (logs messages instead of sending)
+**Production**: Uses `SNSSMSService` (sends real SMS via AWS SNS)
+
 ### LLM Configuration
 
 - `ANTHROPIC_API_KEY`: API key for Claude (Anthropic) LLM service
@@ -146,3 +154,49 @@ aws iam attach-user-policy \
 ```
 
 See `infra/modules/iam/README.md` for details on permissions granted.
+
+## AWS SNS Configuration for SMS (Issue #37)
+
+### Local Development
+
+By default, uses `FakeSMSService` which logs messages instead of sending.
+
+Set `USE_AWS_SNS=false` in `.env`.
+
+### Production Setup
+
+1. **Enable AWS SNS**:
+   ```bash
+   export USE_AWS_SNS=true
+   export AWS_REGION=us-east-1
+   ```
+
+2. **Configure IAM permissions**:
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       {
+         "Effect": "Allow",
+         "Action": [
+           "sns:Publish"
+         ],
+         "Resource": "*"
+       }
+     ]
+   }
+   ```
+
+3. **Test SMS sending**:
+   ```bash
+   curl -X POST http://localhost:4000/api/technicians/{id}/telegram-invitation
+   ```
+
+### SMS Message Format
+
+```
+Hi {name}, tap this link to connect your Telegram account to Field Intake:
+https://t.me/{bot_username}?start={token}
+
+This link expires in 1 hour.
+```

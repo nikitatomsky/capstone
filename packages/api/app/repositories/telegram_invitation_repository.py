@@ -1,5 +1,5 @@
 """Repository for Telegram invitation persistence."""
-from datetime import datetime
+from datetime import UTC, datetime
 
 from app.models.telegram_invitation import TelegramInvitation
 
@@ -53,6 +53,6 @@ class TelegramInvitationRepository:
             return False
 
         # Update used_at timestamp
-        invitation.used_at = datetime.now()
+        invitation.used_at = datetime.now(UTC)
         self._invitations[token_hash] = invitation
         return True

@@ -12,7 +12,11 @@ terraform {
 }
 
 provider "aws" {
-  region = var.aws_region
+  region                   = var.aws_region
+  skip_metadata_api_check  = true  # Disable EC2 instance metadata service checks
+  skip_region_validation   = true  # Skip region validation
+  skip_requesting_account_id = true  # Skip account ID lookup
+  # Note: Uses environment variables AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN
 }
 
 # DynamoDB tables for assignment workflow
@@ -38,6 +42,16 @@ module "iam" {
 
   project_name = var.project_name
   environment  = var.environment
+}
+
+# AWS SES for email delivery (invitation links)
+module "ses" {
+  source = "../../modules/ses"
+
+  environment = var.environment
+  from_email  = var.ses_from_email
+  domain_name = var.ses_domain_name
+  aws_region  = var.aws_region
 }
 
 # TODO: Replace this placeholder with a call to infra/modules/serverless-api.

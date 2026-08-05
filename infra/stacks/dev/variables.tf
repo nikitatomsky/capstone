@@ -63,3 +63,16 @@ variable "log_retention_days" {
   type        = number
   default     = 14
 }
+
+# SES Configuration
+variable "ses_from_email" {
+  description = "Email address for SES identity (e.g., noreply@example.com). Used for sending invitation emails."
+  type        = string
+  default     = ""
+}
+
+variable "ses_domain_name" {
+  description = "Domain name for SES identity (e.g., example.com). Leave empty to use email identity instead."
+  type        = string
+  default     = ""
+}

@@ -130,6 +130,7 @@ class DynamoDBTechnicianRepository(TechnicianRepository):
         technician = Technician(
             name=technician_data.name,
             phone_number=technician_data.phone_number,
+            email=technician_data.email,
             chat_id=technician_data.chat_id
         )
 
@@ -140,9 +141,11 @@ class DynamoDBTechnicianRepository(TechnicianRepository):
             'registered_at': technician.registered_at.isoformat()
         }
 
-        # Only include chat_id if it's not None
+        # Only include optional fields if they're not None
         if technician.chat_id is not None:
             item['chat_id'] = technician.chat_id
+        if technician.email is not None:
+            item['email'] = technician.email
 
         self.technicians_table.put_item(Item=item)
 
@@ -270,6 +273,7 @@ class FakeTechnicianRepository(TechnicianRepository):
         technician = Technician(
             name=technician_data.name,
             phone_number=technician_data.phone_number,
+            email=technician_data.email,
             chat_id=technician_data.chat_id
         )
 
@@ -314,6 +318,7 @@ class FakeTechnicianRepository(TechnicianRepository):
             technician_id=technician.technician_id,
             name=technician.name,
             phone_number=technician.phone_number,
+            email=technician.email,
             chat_id=chat_id,  # Update chat_id
             registered_at=technician.registered_at
         )
